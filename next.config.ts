@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const securityHeaders = [
   {
@@ -33,8 +34,10 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "media-src 'self' blob:",
-      "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com",
+      // Allow connections to AI APIs, Sentry, and PostHog
+      "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.ingest.sentry.io https://app.posthog.com https://eu.posthog.com",
       "font-src 'self'",
+      "worker-src 'self'",
       "object-src 'none'",
       "frame-src 'none'",
       "base-uri 'self'",
@@ -54,4 +57,15 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Sentry org/project (populated at build time via SENTRY_ORG / SENTRY_PROJECT env vars)
+  silent: !process.env.CI,
+
+  // Upload source maps only in CI/production to avoid leaking them locally
+  sourcemaps: {
+    disable: process.env.NODE_ENV !== "production",
+  },
+
+  // Tunnel Sentry requests through /api/_sentry to avoid ad-blocker interference
+  tunnelRoute: "/api/_sentry",
+});

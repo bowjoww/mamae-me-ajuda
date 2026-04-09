@@ -1,0 +1,51 @@
+{
+  "name": "Mamãe, me ajuda!",
+  "short_name": "Mamãe Ajuda",
+  "description": "Seu ajudante de estudos com inteligência artificial",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#7c3aed",
+  "theme_color": "#7c3aed",
+  "lang": "pt-BR",
+  "categories": ["education", "kids"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/tela-inicial.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Tela inicial — digite seu nome para começar"
+    },
+    {
+      "src": "/screenshots/conversa.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Conversa com a tutora de estudos"
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

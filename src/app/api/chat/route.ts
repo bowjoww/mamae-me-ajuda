@@ -1,11 +1,19 @@
+import * as Sentry from "@sentry/nextjs";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { chatRatelimit, getClientIp } from "@/lib/ratelimit";
+import { buildSystemPrompt, sanitizeStudentName } from "@/lib/chatUtils";
+import { logBlockedModerationEvent, moderateText } from "@/lib/moderation";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const ALLOWED_IMAGE_MIMES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_HISTORY_MESSAGES = 10;
+const BLOCKED_INPUT_MESSAGE =
+  "Nao posso ajudar com esse tipo de conteudo. Vamos focar em uma duvida de estudos?";
+const BLOCKED_OUTPUT_MESSAGE =
+  "Desculpa, nao posso responder esse conteudo com seguranca. Vamos tentar outra pergunta de estudos?";
 
 const chatSchema = z.object({
   messages: z
@@ -18,45 +26,9 @@ const chatSchema = z.object({
     )
     .min(1),
   studentName: z.string().max(50).default("estudante"),
+  conversationId: z.string().uuid().optional(),
 });
 
-function sanitizeStudentName(name: string): string {
-  return name.replace(/<[^>]*>/g, "").trim() || "estudante";
-}
-
-function buildSystemPrompt(studentName: string) {
-  return `Você é a "Mamãe, me ajuda!", uma tutora educacional amigável para ${studentName}, um(a) estudante brasileiro(a).
-
-REGRAS ABSOLUTAS:
-1. NUNCA dê a resposta direta de nenhum exercício ou problema.
-2. Sempre ensine o RACIOCÍNIO e o CAMINHO para chegar na resposta.
-3. Use perguntas guiadas para ajudar ${studentName} a pensar por conta própria.
-4. Se insistir pedindo a resposta, explique gentilmente que você está ali para ajudar a APRENDER, não para fazer a lição.
-
-COMO ENSINAR:
-- Identifique a matéria e o tópico do exercício
-- Explique o conceito por trás do exercício de forma simples
-- Dê exemplos DIFERENTES (nunca use os mesmos números/dados do exercício)
-- Faça perguntas como: "O que você acha que acontece quando...?", "Você se lembra de como funciona...?"
-- Quando acertar um passo, comemore! Use palavras de incentivo
-- Se errar, não diga "errado" — diga "quase lá!" e guie na direção certa
-
-PERSONALIDADE:
-- Amigável, paciente e encorajadora
-- Use linguagem simples apropriada para crianças e adolescentes
-- Use emojis com moderação para tornar a conversa mais divertida
-- Responda SEMPRE em português brasileiro
-- Seja breve — respostas longas demais cansam. Prefira respostas curtas com perguntas que incentivem a participação
-- Chame o(a) estudante sempre pelo nome: ${studentName}
-
-QUANDO RECEBER UMA FOTO:
-- Primeiro, descreva o que você vê no exercício para confirmar que entendeu
-- Depois, comece a guiar pelo raciocínio
-- Se a foto estiver ruim ou ilegível, peça educadamente para tirar outra foto
-
-MATÉRIAS QUE VOCÊ PODE AJUDAR:
-Matemática, Português, Ciências, História, Geografia, Inglês, e outras matérias do ensino fundamental e médio.`;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -90,13 +62,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { messages, studentName: rawName } = parsed.data;
+    const { messages, studentName: rawName, conversationId } = parsed.data;
     const studentName = sanitizeStudentName(rawName);
 
     // Cap history to last MAX_HISTORY_MESSAGES messages
     const cappedMessages = messages.slice(-MAX_HISTORY_MESSAGES);
 
     const lastMessage = cappedMessages[cappedMessages.length - 1];
+    if (lastMessage.role !== "user") {
+      return NextResponse.json(
+        { error: "A ultima mensagem precisa ser enviada pelo usuario." },
+        { status: 400 }
+      );
+    }
 
     // Validate image MIME type and size
     if (lastMessage.image) {
@@ -122,6 +100,28 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+    }
+
+    const requestId = req.headers.get("x-request-id");
+    const inputModeration = await moderateText({
+      text: lastMessage.content,
+      scope: "input",
+    });
+
+    if (inputModeration.blocked) {
+      logBlockedModerationEvent({
+        scope: "input",
+        engine: inputModeration.engine ?? "keyword",
+        categories: inputModeration.categories,
+        textLength: lastMessage.content.length,
+        hasImage: Boolean(lastMessage.image),
+        requestId,
+      });
+
+      return NextResponse.json(
+        { error: BLOCKED_INPUT_MESSAGE, blocked: true },
+        { status: 200 }
+      );
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -162,9 +162,71 @@ export async function POST(req: NextRequest) {
     const result = await chat.sendMessage(parts);
     const text = result.response.text();
 
+    const outputModeration = await moderateText({
+      text,
+      scope: "output",
+    });
+
+    if (outputModeration.blocked) {
+      logBlockedModerationEvent({
+        scope: "output",
+        engine: outputModeration.engine ?? "keyword",
+        categories: outputModeration.categories,
+        textLength: text.length,
+        hasImage: false,
+        requestId,
+      });
+
+      return NextResponse.json({ response: BLOCKED_OUTPUT_MESSAGE, blocked: true });
+    }
+
+    // Persist messages if a conversationId was provided and user is authenticated
+    if (conversationId) {
+      const supabase = await createSupabaseServerClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        // Verify the conversation belongs to this user before inserting
+        const { data: conversation } = await supabase
+          .from("conversations")
+          .select("id")
+          .eq("id", conversationId)
+          .eq("parent_id", user.id)
+          .single();
+
+        if (conversation) {
+          await supabase.from("messages").insert([
+            {
+              conversation_id: conversationId,
+              role: "user" as const,
+              content: lastMessage.content,
+              has_image: Boolean(lastMessage.image),
+            },
+            {
+              conversation_id: conversationId,
+              role: "model" as const,
+              content: text,
+              has_image: false,
+            },
+          ]);
+
+          // Bump conversation updated_at
+          await supabase
+            .from("conversations")
+            .update({ updated_at: new Date().toISOString() })
+            .eq("id", conversationId);
+        }
+      }
+    }
+
     return NextResponse.json({ response: text });
   } catch (error) {
-    console.error("Erro na API:", error);
+    Sentry.captureException(error, {
+      tags: { endpoint: "chat" },
+      // LGPD: deliberately omit user data / studentName from context
+    });
     return NextResponse.json(
       { error: "Ops! Algo deu errado. Tente novamente em alguns segundos." },
       { status: 500 }

@@ -6,21 +6,13 @@ import { ChatMessage } from "./components/ChatMessage";
 import { TypingIndicator } from "./components/TypingIndicator";
 import { ImagePreviewBar } from "./components/ImagePreviewBar";
 import { ChatInput } from "./components/ChatInput";
-
-interface Message {
-  role: "user" | "model";
-  content: string;
-  image?: string;
-}
-
-function makeWelcomeMessage(name: string): Message {
-  return {
-    role: "model",
-    content: `Oi, ${name}! 👋 Eu sou sua tutora de estudos! Me mande sua dúvida ou tire uma foto do exercício que eu te ajudo a entender! 📚`,
-  };
-}
+import { ConsentModal } from "./components/ConsentModal";
+import { type Message, makeWelcomeMessage, compressImage } from "@/lib/chatUtils";
+import { track, AnalyticsEvent } from "@/lib/analytics";
+import { loadConsent } from "@/lib/consent";
 
 export default function Home() {
+  const [consentGiven, setConsentGiven] = useState<boolean | null>(null);
   const [studentName, setStudentName] = useState<string | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -33,43 +25,27 @@ export default function Home() {
   const textInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Check consent on mount (SSR-safe — localStorage is only available in the browser)
+  useEffect(() => {
+    const record = loadConsent();
+    setConsentGiven(record?.accepted === true);
+  }, []);
+
+  const handleConsentAccept = () => {
+    setConsentGiven(true);
+  };
+
   const handleStartChat = () => {
     const name = nameInput.trim();
     if (!name) return;
     setStudentName(name);
     setMessages([makeWelcomeMessage(name)]);
+    track(AnalyticsEvent.CHAT_STARTED, { has_name: true });
   };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
-
-  const compressImage = (dataUrl: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX_SIZE = 1024;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height && width > MAX_SIZE) {
-          height = (height * MAX_SIZE) / width;
-          width = MAX_SIZE;
-        } else if (height > MAX_SIZE) {
-          width = (width * MAX_SIZE) / height;
-          height = MAX_SIZE;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.7));
-      };
-      img.src = dataUrl;
-    });
-  };
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -96,10 +72,16 @@ export default function Home() {
     };
 
     const newMessages = [...messages, userMessage];
+    const messageNumber = newMessages.filter((m) => m.role === "user").length;
     setMessages(newMessages);
     setInput("");
     setImagePreview(null);
     setIsLoading(true);
+
+    track(AnalyticsEvent.MESSAGE_SENT, {
+      has_image: !!imagePreview,
+      message_number: messageNumber,
+    });
 
     try {
       const res = await fetch("/api/chat", {
@@ -191,13 +173,21 @@ export default function Home() {
     };
   }, []);
 
+  // null = still loading from localStorage (avoid flash)
+  if (consentGiven === null) {
+    return <div className="h-dvh bg-violet-50" aria-hidden="true" />;
+  }
+
   if (!studentName) {
     return (
-      <WelcomeScreen
-        nameInput={nameInput}
-        onNameChange={setNameInput}
-        onStart={handleStartChat}
-      />
+      <>
+        <WelcomeScreen
+          nameInput={nameInput}
+          onNameChange={setNameInput}
+          onStart={handleStartChat}
+        />
+        {!consentGiven && <ConsentModal onAccept={handleConsentAccept} />}
+      </>
     );
   }
 

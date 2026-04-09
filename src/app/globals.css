@@ -1,26 +1,60 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-nunito: "Nunito", sans-serif;
+  --color-violet-50: #f5f3ff;
+  --color-violet-100: #ede9fe;
+  --color-violet-200: #ddd6fe;
+  --color-violet-500: #8b5cf6;
+  --color-violet-600: #7c3aed;
+  --color-violet-700: #6d28d9;
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #dbeafe;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-nunito);
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(135deg, #ede9fe 0%, #dbeafe 100%);
+  min-height: 100dvh;
 }
+
+/* Hide scrollbar but keep functionality */
+.chat-scroll::-webkit-scrollbar {
+  display: none;
+}
+.chat-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Message animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-appear {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* Typing dots animation */
+@keyframes bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-8px);
+  }
+}
+
+.dot-1 { animation: bounce 1.4s infinite 0s; }
+.dot-2 { animation: bounce 1.4s infinite 0.2s; }
+.dot-3 { animation: bounce 1.4s infinite 0.4s; }
