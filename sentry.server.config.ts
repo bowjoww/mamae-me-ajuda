@@ -6,6 +6,7 @@
  * - beforeSend scrubs PII fields from every event
  */
 import * as Sentry from "@sentry/nextjs";
+import type { ErrorEvent, TransactionEvent } from "@sentry/core";
 
 const SENTRY_DSN = process.env.SENTRY_DSN;
 
@@ -52,16 +53,15 @@ function scrubString(value: string): string {
   return result;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function scrubObject(obj: Record<string, any>): Record<string, any> {
-  const result: Record<string, any> = {};
+function scrubObject(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
     if (PII_FIELDS.has(key)) {
       result[key] = "[Filtered]";
     } else if (typeof value === "string") {
       result[key] = scrubString(value);
     } else if (value && typeof value === "object" && !Array.isArray(value)) {
-      result[key] = scrubObject(value as Record<string, any>);
+      result[key] = scrubObject(value as Record<string, unknown>);
     } else {
       result[key] = value;
     }
@@ -69,7 +69,8 @@ function scrubObject(obj: Record<string, any>): Record<string, any> {
   return result;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function scrubPii<T extends Record<string, any>>(event: T): T {
-  return scrubObject(event) as T;
+function scrubPii(event: ErrorEvent): ErrorEvent;
+function scrubPii(event: TransactionEvent): TransactionEvent;
+function scrubPii(event: ErrorEvent | TransactionEvent): ErrorEvent | TransactionEvent {
+  return scrubObject(event as unknown as Record<string, unknown>) as unknown as ErrorEvent | TransactionEvent;
 }
