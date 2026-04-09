@@ -111,7 +111,8 @@ describe("POST /api/chat", () => {
 
   it("passes studentName to the system prompt builder", async () => {
     await POST(makeRequest(VALID_BODY));
-    const callArgs = mockGetGenerativeModel.mock.calls[0][0];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const callArgs = (mockGetGenerativeModel.mock.calls as any[][])[0][0];
     const systemText = callArgs.systemInstruction.parts[0].text;
     expect(systemText).toContain("Ana");
   });
@@ -158,7 +159,8 @@ describe("POST /api/chat", () => {
     expect(res.status).toBe(200);
 
     // The history passed to startChat should be at most MAX_HISTORY_MESSAGES - 1
-    const historyPassed = mockStartChat.mock.calls[0][0].history;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const historyPassed = (mockStartChat.mock.calls as any[][])[0][0].history;
     expect(historyPassed.length).toBeLessThanOrEqual(9);
   });
 
