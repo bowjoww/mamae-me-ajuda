@@ -62,7 +62,7 @@ export function makeWelcomeMessage(name: string): Message {
 const MAX_IMAGE_DIMENSION = 1024;
 
 export function compressImage(dataUrl: string): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement("canvas");
@@ -83,6 +83,7 @@ export function compressImage(dataUrl: string): Promise<string> {
       ctx.drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL("image/jpeg", 0.7));
     };
+    img.onerror = () => reject(new Error("Failed to load image for compression"));
     img.src = dataUrl;
   });
 }

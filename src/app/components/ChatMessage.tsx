@@ -1,7 +1,19 @@
 "use client";
 
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+const MARKDOWN_BASE_COMPONENTS = {
+  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-1 last:mb-0">{children}</p>,
+  em: ({ children }: { children?: React.ReactNode }) => <em>{children}</em>,
+  ul: ({ children }: { children?: React.ReactNode }) => <ul className="list-disc pl-4 my-1">{children}</ul>,
+  ol: ({ children }: { children?: React.ReactNode }) => <ol className="list-decimal pl-4 my-1">{children}</ol>,
+  li: ({ children }: { children?: React.ReactNode }) => <li className="my-0">{children}</li>,
+  code: ({ children }: { children?: React.ReactNode }) => (
+    <code className="bg-black/10 rounded px-1 py-0.5 text-xs font-mono">{children}</code>
+  ),
+} as const;
 
 interface ChatMessageProps {
   role: "user" | "model";
@@ -23,6 +35,15 @@ export function ChatMessage({
   onSpeak,
 }: ChatMessageProps) {
   const isUser = role === "user";
+
+  const markdownComponents = useMemo(() => ({
+    ...MARKDOWN_BASE_COMPONENTS,
+    strong: ({ children }: { children?: React.ReactNode }) => (
+      <strong className={isUser ? "text-white font-bold" : "text-gray-900 font-bold"}>
+        {children}
+      </strong>
+    ),
+  }), [isUser]);
 
   return (
     <div
@@ -46,23 +67,7 @@ export function ChatMessage({
         <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-0 prose-ul:my-0 prose-ol:my-0">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
-            components={{
-              // Prevent any raw HTML in the markdown from being rendered
-              // by relying only on the react-markdown sanitized components
-              p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-              strong: ({ children }) => (
-                <strong className={isUser ? "text-white font-bold" : "text-gray-900 font-bold"}>
-                  {children}
-                </strong>
-              ),
-              em: ({ children }) => <em>{children}</em>,
-              ul: ({ children }) => <ul className="list-disc pl-4 my-1">{children}</ul>,
-              ol: ({ children }) => <ol className="list-decimal pl-4 my-1">{children}</ol>,
-              li: ({ children }) => <li className="my-0">{children}</li>,
-              code: ({ children }) => (
-                <code className="bg-black/10 rounded px-1 py-0.5 text-xs font-mono">{children}</code>
-              ),
-            }}
+            components={markdownComponents}
           >
             {content}
           </ReactMarkdown>

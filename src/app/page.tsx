@@ -8,6 +8,8 @@ import { ImagePreviewBar } from "./components/ImagePreviewBar";
 import { ChatInput } from "./components/ChatInput";
 import { ConsentModal } from "./components/ConsentModal";
 import { type Message, makeWelcomeMessage, compressImage } from "@/lib/chatUtils";
+
+type MessageWithKey = Message & { _key: string };
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { loadConsent } from "@/lib/consent";
 
@@ -15,7 +17,7 @@ export default function Home() {
   const [consentGiven, setConsentGiven] = useState<boolean | null>(null);
   const [studentName, setStudentName] = useState<string | null>(null);
   const [nameInput, setNameInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<MessageWithKey[]>([]);
   const [input, setInput] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +41,7 @@ export default function Home() {
     const name = nameInput.trim();
     if (!name) return;
     setStudentName(name);
-    setMessages([makeWelcomeMessage(name)]);
+    setMessages([{ ...makeWelcomeMessage(name), _key: crypto.randomUUID() }]);
     track(AnalyticsEvent.CHAT_STARTED, { has_name: true });
   };
 
@@ -47,15 +49,16 @@ export default function Home() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async (ev) => {
+    reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
-      const compressed = await compressImage(dataUrl);
-      setImagePreview(compressed);
+      compressImage(dataUrl)
+        .then(setImagePreview)
+        .catch(() => setImagePreview(dataUrl));
     };
     reader.readAsDataURL(file);
   };
@@ -65,7 +68,8 @@ export default function Home() {
     if (!trimmedInput && !imagePreview) return;
     if (isLoading) return;
 
-    const userMessage: Message = {
+    const userMessage: MessageWithKey = {
+      _key: crypto.randomUUID(),
       role: "user",
       content: trimmedInput,
       image: imagePreview || undefined,
@@ -88,22 +92,28 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: newMessages.slice(1),
+          messages: newMessages.slice(1).map(({ _key: _, ...m }) => m),
           studentName,
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json() as Record<string, unknown>;
 
-      if (data.error) {
-        setMessages([...newMessages, { role: "model", content: data.error }]);
+      let replyContent: string;
+      if (typeof data.error === "string") {
+        replyContent = data.error;
+      } else if (typeof data.response === "string") {
+        replyContent = data.response;
       } else {
-        setMessages([...newMessages, { role: "model", content: data.response }]);
+        replyContent = "Ops! Recebi uma resposta inesperada. Tenta de novo! 🤔";
       }
+
+      setMessages([...newMessages, { _key: crypto.randomUUID(), role: "model", content: replyContent }]);
     } catch {
       setMessages([
         ...newMessages,
         {
+          _key: crypto.randomUUID(),
           role: "model",
           content:
             "Ops! Não consegui me conectar. Verifica sua internet e tenta de novo! 🔌",
@@ -157,7 +167,14 @@ export default function Home() {
       audioRef.current = audio;
       setLoadingAudio(null);
       setPlayingIndex(index);
-      await audio.play();
+      try {
+        await audio.play();
+      } catch {
+        // play() rejected (e.g. autoplay blocked by browser)
+        URL.revokeObjectURL(audioUrl);
+        audioRef.current = null;
+        setPlayingIndex(null);
+      }
     } catch {
       setLoadingAudio(null);
       setPlayingIndex(null);
@@ -209,7 +226,7 @@ export default function Home() {
       >
         {messages.map((msg, i) => (
           <ChatMessage
-            key={i}
+            key={msg._key}
             role={msg.role}
             content={msg.content}
             image={msg.image}
