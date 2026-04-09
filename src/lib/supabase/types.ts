@@ -9,6 +9,27 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      consent_records: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          accepted: boolean;
+          version: string;
+          accepted_at: string;
+          parental_consent: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          accepted: boolean;
+          version: string;
+          accepted_at: string;
+          parental_consent: boolean;
+          created_at?: string;
+        };
+        Update: never;
+      };
       children: {
         Row: {
           id: string;

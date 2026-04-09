@@ -3,6 +3,7 @@ import { Redis } from "@upstash/redis";
 
 let chatRatelimit: Ratelimit | null = null;
 let ttsRatelimit: Ratelimit | null = null;
+let authRatelimit: Ratelimit | null = null;
 
 if (
   process.env.UPSTASH_REDIS_REST_URL &&
@@ -24,6 +25,13 @@ if (
     limiter: Ratelimit.slidingWindow(20, "1 m"),
     prefix: "rl:tts",
   });
+
+  // Auth endpoints: max 5 attempts per IP per minute to deter brute-force
+  authRatelimit = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(5, "1 m"),
+    prefix: "rl:auth",
+  });
 }
 
 export function getClientIp(req: Request): string {
@@ -32,4 +40,4 @@ export function getClientIp(req: Request): string {
   return req.headers.get("x-real-ip") ?? "127.0.0.1";
 }
 
-export { chatRatelimit, ttsRatelimit };
+export { chatRatelimit, ttsRatelimit, authRatelimit };

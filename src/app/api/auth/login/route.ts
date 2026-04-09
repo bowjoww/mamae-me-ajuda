@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { authRatelimit, getClientIp } from "@/lib/ratelimit";
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido."),
@@ -8,6 +9,17 @@ const loginSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  if (authRatelimit) {
+    const ip = getClientIp(req);
+    const { success } = await authRatelimit.limit(ip);
+    if (!success) {
+      return NextResponse.json(
+        { error: "Muitas tentativas. Tente novamente em breve." },
+        { status: 429 }
+      );
+    }
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = loginSchema.safeParse(body);
 

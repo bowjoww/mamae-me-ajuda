@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+// CSP is set dynamically per-request in src/middleware.ts using a per-request
+// nonce, which removes the need for unsafe-eval and unsafe-inline.
+// Only static, non-CSP security headers live here.
 const securityHeaders = [
   {
     key: "X-Content-Type-Options",
@@ -25,24 +28,6 @@ const securityHeaders = [
   {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
-  },
-  {
-    key: "Content-Security-Policy",
-    value: [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      "media-src 'self' blob:",
-      // Allow connections to AI APIs, Sentry, and PostHog
-      "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.ingest.sentry.io https://app.posthog.com https://eu.posthog.com",
-      "font-src 'self'",
-      "worker-src 'self'",
-      "object-src 'none'",
-      "frame-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join("; "),
   },
 ];
 
