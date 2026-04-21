@@ -345,6 +345,59 @@ export async function fetchStudyPlan(
   return mapServerStudyPlan(raw, studyPlanFallback);
 }
 
+/**
+ * Fetch the signed-in user's most recent study plan (expedição) directly
+ * from the server. Used as a fallback when localStorage `mma.activePlanId`
+ * is missing — e.g. after a hard refresh that cleared site data, or when
+ * the user signs in from a different browser. Without this, /prova and
+ * /estudo would show the empty "crie uma expedição" state even though the
+ * plan already exists in Supabase, forcing duplicate creation.
+ *
+ * Returns the latest StudyPlan (mapped to client shape) or null if the
+ * child has no plans at all. Also writes the id to localStorage so the
+ * next navigation hits the fast path.
+ */
+export async function fetchLatestStudyPlan(): Promise<StudyPlan | null> {
+  const resolved = await resolveChildIdOrNull(undefined);
+  if (!resolved) return null;
+
+  try {
+    const res = await fetch("/api/study/plans", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      data?: Array<{ id: string; created_at?: string }>;
+    };
+    const plans = body.data ?? [];
+    if (plans.length === 0) return null;
+    // Server orders by created_at desc per /api/study/plans/route.ts. Still
+    // sort defensively so a contract drift doesn't flip the pick.
+    const sorted = [...plans].sort((a, b) => {
+      const ta = a.created_at ? Date.parse(a.created_at) : 0;
+      const tb = b.created_at ? Date.parse(b.created_at) : 0;
+      return tb - ta;
+    });
+    const latest = sorted[0];
+    const plan = await fetchStudyPlan(latest.id);
+    if (plan?.id) {
+      try {
+        window.localStorage.setItem("mma.activePlanId", plan.id);
+      } catch {
+        // Best-effort cache write.
+      }
+    }
+    return plan;
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { endpoint: "study-plans-latest" },
+    });
+    return null;
+  }
+}
+
 export interface CreatePlanFromUtteranceResult {
   planId: string;
   studyPlan: StudyPlan;
@@ -465,11 +518,16 @@ export async function fetchNextFlashcards(limit = 5): Promise<Flashcard[]> {
     );
   }
 
-  const planId = readActivePlanId();
+  // Same localStorage-stale pattern as /prova: prefer the cached id but fall
+  // back to querying the backend for the latest plan when the cache is
+  // empty. Otherwise a hard refresh or a fresh browser would show "Sem
+  // cartas prontas ainda" even though the expedição exists in Supabase.
+  let planId = readActivePlanId();
+  if (!planId) {
+    const latest = await fetchLatestStudyPlan();
+    planId = latest?.id ?? null;
+  }
 
-  // No plan yet → nothing to bootstrap and /next won't have cards either.
-  // The caller (estudo/page.tsx) surfaces this as the empty state with a
-  // link back to /prova to map the expedição first.
   if (!planId) {
     if (MOCK_ON_ERROR) return flashcardsFallback.slice(0, limit);
     return [];

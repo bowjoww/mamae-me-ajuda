@@ -8,6 +8,7 @@ import { LoadErrorState, LoadSkeleton } from "../components/hud/LoadErrorState";
 import { TabBar } from "../components/navigation/TabBar";
 import {
   createStudyPlanFromUtterance,
+  fetchLatestStudyPlan,
   fetchProfile,
   fetchStudyPlan,
 } from "@/lib/api/gamificationClient";
@@ -386,11 +387,19 @@ export default function ProvaPage() {
 
   const loadResource = useCallback(async (): Promise<ProvaResource> => {
     const activePlanId = readActivePlanId();
-    const [profile, plan] = await Promise.all([
+    const [profile, storedPlan] = await Promise.all([
       fetchProfile(),
       fetchStudyPlan(activePlanId),
     ]);
-    return { profile, plan };
+    // If localStorage has gone stale (hard refresh, new browser, incognito)
+    // we'd otherwise prompt the user to re-create a plan they already have.
+    // Fallback to the most recent plan the backend knows about and write
+    // the id back into localStorage for the next navigation.
+    if (!storedPlan) {
+      const latest = await fetchLatestStudyPlan();
+      return { profile, plan: latest };
+    }
+    return { profile, plan: storedPlan };
   }, []);
 
   const { data, status, reload } = useAsyncResource<ProvaResource>(loadResource);

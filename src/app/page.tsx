@@ -39,6 +39,33 @@ export default function Home() {
     }
   }, [studentName, messages.length, startSession]);
 
+  // "Pedir ajuda" on the FlashcardDuel drops a contextual prompt into
+  // sessionStorage (or the ?ask= URL param as a fallback) before routing
+  // here. Pre-fill the input so the student can either hit send as-is or
+  // edit before sending. Also read ?ask= because some browsers block
+  // sessionStorage from third-party contexts.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let seed = "";
+    try {
+      seed = window.sessionStorage.getItem("mma.pendingChatSeed") ?? "";
+      if (seed) window.sessionStorage.removeItem("mma.pendingChatSeed");
+    } catch {
+      // sessionStorage disabled — fall through to URL param.
+    }
+    if (!seed) {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("ask");
+      if (fromUrl) {
+        seed = fromUrl;
+        // Clean the URL so a refresh doesn't reseed the input.
+        const clean = window.location.pathname;
+        window.history.replaceState(null, "", clean);
+      }
+    }
+    if (seed) setInput(seed);
+  }, []);
+
   const handleStartChat = () => {
     const name = nameInput.trim();
     if (!name) return;
