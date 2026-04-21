@@ -3,9 +3,16 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { chatRatelimit, getClientIp } from "@/lib/ratelimit";
-import { buildSystemPrompt, sanitizeStudentName } from "@/lib/chatUtils";
+import {
+  buildSystemPrompt,
+  sanitizeStudentName,
+  type SessionContext,
+  type TutorMode,
+} from "@/lib/chatUtils";
 import { logBlockedModerationEvent, moderateText } from "@/lib/moderation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/apiHelpers";
+import { askTutor, type TutorMessage } from "@/lib/services/aiTutor";
 
 const ALLOWED_IMAGE_MIMES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
@@ -14,6 +21,34 @@ const BLOCKED_INPUT_MESSAGE =
   "Nao posso ajudar com esse tipo de conteudo. Vamos focar em uma duvida de estudos?";
 const BLOCKED_OUTPUT_MESSAGE =
   "Desculpa, nao posso responder esse conteudo com seguranca. Vamos tentar outra pergunta de estudos?";
+
+// ---------------------------------------------------------------------------
+// Provider flag — `gemini` remains the default for safe rollback. Flipping
+// AI_PROVIDER=openai enables GPT-5.1 via askTutor + SSE streaming.
+// ---------------------------------------------------------------------------
+type AiProvider = "gemini" | "openai";
+
+function getAiProvider(): AiProvider {
+  const raw = (process.env.AI_PROVIDER ?? "gemini").toLowerCase();
+  return raw === "openai" ? "openai" : "gemini";
+}
+
+// Exam-format hint for Modo Prova. Discursive is the Colégio Impacto default.
+const examFormatSchema = z.enum(["discursive", "multiple-choice", "mixed"]);
+
+const sessionContextSchema = z
+  .object({
+    subject: z.string().max(80).optional(),
+    topic: z.string().max(200).optional(),
+    examDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "examDate must be YYYY-MM-DD")
+      .optional(),
+    examFormat: examFormatSchema.optional(),
+    topicsMastered: z.array(z.string().max(120)).max(30).optional(),
+  })
+  .strict()
+  .optional();
 
 const chatSchema = z.object({
   messages: z
@@ -27,12 +62,129 @@ const chatSchema = z.object({
     .min(1),
   studentName: z.string().max(50).default("estudante"),
   conversationId: z.string().uuid().optional(),
+  mode: z.enum(["tarefa", "prova", "estudo"]).default("tarefa"),
+  sessionContext: sessionContextSchema,
+  stream: z.boolean().optional(),
 });
 
+interface ValidatedImage {
+  mimeType: string;
+  data: string;
+}
+
+function validateImageDataUrl(dataUrl: string): ValidatedImage | { error: string; status: number } {
+  const matches = dataUrl.match(/^data:(image\/[\w+]+);base64,(.+)$/);
+  if (!matches) {
+    return { error: "Formato de imagem inválido.", status: 400 };
+  }
+  const mimeType = matches[1];
+  if (!ALLOWED_IMAGE_MIMES.includes(mimeType as typeof ALLOWED_IMAGE_MIMES[number])) {
+    return { error: "Tipo de imagem não suportado. Use JPEG, PNG, GIF ou WebP.", status: 400 };
+  }
+  const base64 = matches[2];
+  const estimatedBytes = Math.ceil((base64.length * 3) / 4);
+  if (estimatedBytes > MAX_IMAGE_BYTES) {
+    return { error: "Imagem muito grande. O tamanho máximo é 5MB.", status: 400 };
+  }
+  return { mimeType, data: base64 };
+}
+
+async function callGemini(args: {
+  messages: Array<{ role: "user" | "model"; content: string; image?: string }>;
+  studentName: string;
+  mode: TutorMode;
+  sessionContext?: SessionContext;
+}): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("gemini_key_missing");
+  }
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    systemInstruction: {
+      role: "user",
+      parts: [
+        {
+          text: buildSystemPrompt(args.studentName, args.mode, args.sessionContext),
+        },
+      ],
+    },
+  });
+
+  const history = args.messages.slice(0, -1).map((msg) => ({
+    role: msg.role === "user" ? "user" : "model",
+    parts: [{ text: msg.content }],
+  }));
+
+  const lastMessage = args.messages[args.messages.length - 1];
+  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+
+  if (lastMessage.image) {
+    const matches = lastMessage.image.match(/^data:(image\/[\w+]+);base64,(.+)$/);
+    if (matches) {
+      parts.push({
+        inlineData: { mimeType: matches[1], data: matches[2] },
+      });
+    }
+  }
+  parts.push({
+    text: lastMessage.content || "O que você vê nesta imagem? Me ajude a entender o exercício.",
+  });
+
+  const chat = model.startChat({ history });
+  const result = await chat.sendMessage(parts);
+  return result.response.text();
+}
+
+async function persistMessages(params: {
+  conversationId: string;
+  userContent: string;
+  modelContent: string;
+  hasImage: boolean;
+}): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("id", params.conversationId)
+    .eq("parent_id", user.id)
+    .single();
+  if (!conversation) return;
+
+  await supabase.from("messages").insert([
+    {
+      conversation_id: params.conversationId,
+      role: "user" as const,
+      content: params.userContent,
+      has_image: params.hasImage,
+    },
+    {
+      conversation_id: params.conversationId,
+      role: "model" as const,
+      content: params.modelContent,
+      has_image: false,
+    },
+  ]);
+  await supabase
+    .from("conversations")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", params.conversationId);
+}
+
+function sseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // Rate limiting
+    // Rate limiting (preserved from Gemini path). Runs before auth so that
+    // unauthenticated scanners still get throttled.
     if (chatRatelimit) {
       const ip = getClientIp(req);
       const { success } = await chatRatelimit.limit(ip);
@@ -44,15 +196,31 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    // Auth gate — every AI call (Gemini or OpenAI) burns credits, so a single
+    // anon hit is a cost-abuse vector. The proxy (src/proxy.ts)
+    // PROTECTED_ROUTES list covers /api/chat too, but we defend in depth: if
+    // the route protection list ever regresses, this guard keeps the AI
+    // calls off the hook.
+    const auth = await requireUser();
+    if (auth.error) return auth.error;
+
+    const provider = getAiProvider();
+
+    // Provider readiness check — keep the same 500 shape as before for legacy
+    // tests that assert "returns 500 when GEMINI_API_KEY is missing".
+    if (provider === "gemini" && !process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        { error: "Chave da API não configurada." },
+        { status: 500 }
+      );
+    }
+    if (provider === "openai" && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "Chave da API não configurada." },
         { status: 500 }
       );
     }
 
-    // Zod validation
     const body = await req.json();
     const parsed = chatSchema.safeParse(body);
     if (!parsed.success) {
@@ -62,12 +230,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { messages, studentName: rawName, conversationId } = parsed.data;
+    const {
+      messages,
+      studentName: rawName,
+      conversationId,
+      mode,
+      sessionContext,
+      stream: wantsStream,
+    } = parsed.data;
     const studentName = sanitizeStudentName(rawName);
 
-    // Cap history to last MAX_HISTORY_MESSAGES messages
     const cappedMessages = messages.slice(-MAX_HISTORY_MESSAGES);
-
     const lastMessage = cappedMessages[cappedMessages.length - 1];
     if (lastMessage.role !== "user") {
       return NextResponse.json(
@@ -76,29 +249,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate image MIME type and size
     if (lastMessage.image) {
-      const matches = lastMessage.image.match(/^data:(image\/[\w+]+);base64,(.+)$/);
-      if (!matches) {
-        return NextResponse.json(
-          { error: "Formato de imagem inválido." },
-          { status: 400 }
-        );
-      }
-      const mimeType = matches[1] as string;
-      if (!ALLOWED_IMAGE_MIMES.includes(mimeType as typeof ALLOWED_IMAGE_MIMES[number])) {
-        return NextResponse.json(
-          { error: "Tipo de imagem não suportado. Use JPEG, PNG, GIF ou WebP." },
-          { status: 400 }
-        );
-      }
-      const base64Data = matches[2];
-      const estimatedBytes = Math.ceil((base64Data.length * 3) / 4);
-      if (estimatedBytes > MAX_IMAGE_BYTES) {
-        return NextResponse.json(
-          { error: "Imagem muito grande. O tamanho máximo é 5MB." },
-          { status: 400 }
-        );
+      const imgCheck = validateImageDataUrl(lastMessage.image);
+      if ("error" in imgCheck) {
+        return NextResponse.json({ error: imgCheck.error }, { status: imgCheck.status });
       }
     }
 
@@ -117,56 +271,146 @@ export async function POST(req: NextRequest) {
         hasImage: Boolean(lastMessage.image),
         requestId,
       });
-
       return NextResponse.json(
         { error: BLOCKED_INPUT_MESSAGE, blocked: true },
         { status: 200 }
       );
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: {
-        role: "user",
-        parts: [{ text: buildSystemPrompt(studentName) }],
-      },
-    });
+    // ------------------------------------------------------------------
+    // Provider dispatch
+    // ------------------------------------------------------------------
+    if (provider === "gemini") {
+      const text = await callGemini({
+        messages: cappedMessages,
+        studentName,
+        mode,
+        sessionContext,
+      });
 
-    // Build conversation history (all but last message)
-    const history = cappedMessages.slice(0, -1).map((msg) => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    }));
+      const outputModeration = await moderateText({ text, scope: "output" });
+      if (outputModeration.blocked) {
+        logBlockedModerationEvent({
+          scope: "output",
+          engine: outputModeration.engine ?? "keyword",
+          categories: outputModeration.categories,
+          textLength: text.length,
+          hasImage: false,
+          requestId,
+        });
+        return NextResponse.json({ response: BLOCKED_OUTPUT_MESSAGE, blocked: true });
+      }
 
-    // Build parts for last message
-    const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
-
-    if (lastMessage.image) {
-      const matches = lastMessage.image.match(/^data:(image\/[\w+]+);base64,(.+)$/);
-      if (matches) {
-        parts.push({
-          inlineData: {
-            mimeType: matches[1],
-            data: matches[2],
-          },
+      if (conversationId) {
+        await persistMessages({
+          conversationId,
+          userContent: lastMessage.content,
+          modelContent: text,
+          hasImage: Boolean(lastMessage.image),
         });
       }
+      return NextResponse.json({ response: text });
     }
 
-    parts.push({
-      text: lastMessage.content || "O que você vê nesta imagem? Me ajude a entender o exercício.",
+    // OpenAI path ------------------------------------------------------
+    const tutorMessages: TutorMessage[] = cappedMessages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      image: m.image,
+    }));
+
+    if (wantsStream) {
+      // SSE — we moderate the aggregate text at the very end, before the `done`
+      // event, so a blocked output still reaches the client but carries the
+      // sanitised fallback message.
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const encoder = new TextEncoder();
+          let aggregate = "";
+          try {
+            const result = await askTutor({
+              mode,
+              studentName,
+              sessionContext,
+              messages: tutorMessages,
+              stream: true,
+            });
+            for await (const evt of result.stream) {
+              if (evt.type === "delta") {
+                aggregate += evt.text;
+                controller.enqueue(encoder.encode(sseEvent("delta", { text: evt.text })));
+              } else if (evt.type === "done") {
+                const outputModeration = await moderateText({
+                  text: aggregate,
+                  scope: "output",
+                });
+                if (outputModeration.blocked) {
+                  logBlockedModerationEvent({
+                    scope: "output",
+                    engine: outputModeration.engine ?? "keyword",
+                    categories: outputModeration.categories,
+                    textLength: aggregate.length,
+                    hasImage: false,
+                    requestId,
+                  });
+                  controller.enqueue(
+                    encoder.encode(
+                      sseEvent("blocked", { message: BLOCKED_OUTPUT_MESSAGE })
+                    )
+                  );
+                  aggregate = BLOCKED_OUTPUT_MESSAGE;
+                } else if (conversationId) {
+                  await persistMessages({
+                    conversationId,
+                    userContent: lastMessage.content,
+                    modelContent: aggregate,
+                    hasImage: Boolean(lastMessage.image),
+                  });
+                }
+                controller.enqueue(
+                  encoder.encode(
+                    sseEvent("done", {
+                      modelUsed: evt.modelUsed,
+                      total_tokens: evt.tokens.total,
+                    })
+                  )
+                );
+              }
+            }
+          } catch (err) {
+            Sentry.captureException(err, { tags: { endpoint: "chat", provider: "openai" } });
+            controller.enqueue(
+              encoder.encode(
+                sseEvent("error", { message: "Ops! Algo deu errado. Tente novamente." })
+              )
+            );
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
+
+    // Non-streaming OpenAI
+    const result = await askTutor({
+      mode,
+      studentName,
+      sessionContext,
+      messages: tutorMessages,
+      stream: false,
     });
+    const text = result.text;
 
-    const chat = model.startChat({ history });
-    const result = await chat.sendMessage(parts);
-    const text = result.response.text();
-
-    const outputModeration = await moderateText({
-      text,
-      scope: "output",
-    });
-
+    const outputModeration = await moderateText({ text, scope: "output" });
     if (outputModeration.blocked) {
       logBlockedModerationEvent({
         scope: "output",
@@ -176,51 +420,17 @@ export async function POST(req: NextRequest) {
         hasImage: false,
         requestId,
       });
-
       return NextResponse.json({ response: BLOCKED_OUTPUT_MESSAGE, blocked: true });
     }
 
-    // Persist messages if a conversationId was provided and user is authenticated
     if (conversationId) {
-      const supabase = await createSupabaseServerClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        // Verify the conversation belongs to this user before inserting
-        const { data: conversation } = await supabase
-          .from("conversations")
-          .select("id")
-          .eq("id", conversationId)
-          .eq("parent_id", user.id)
-          .single();
-
-        if (conversation) {
-          await supabase.from("messages").insert([
-            {
-              conversation_id: conversationId,
-              role: "user" as const,
-              content: lastMessage.content,
-              has_image: Boolean(lastMessage.image),
-            },
-            {
-              conversation_id: conversationId,
-              role: "model" as const,
-              content: text,
-              has_image: false,
-            },
-          ]);
-
-          // Bump conversation updated_at
-          await supabase
-            .from("conversations")
-            .update({ updated_at: new Date().toISOString() })
-            .eq("id", conversationId);
-        }
-      }
+      await persistMessages({
+        conversationId,
+        userContent: lastMessage.content,
+        modelContent: text,
+        hasImage: Boolean(lastMessage.image),
+      });
     }
-
     return NextResponse.json({ response: text });
   } catch (error) {
     Sentry.captureException(error, {
