@@ -38,13 +38,21 @@ function getSupabaseConnectSrc(): string {
   }
 }
 
-function buildCsp(nonce: string): string {
+function buildCsp(): string {
   const supabaseSrc = getSupabaseConnectSrc();
   const directives = [
     "default-src 'self'",
-    // nonce allows Next.js inline hydration scripts; strict-dynamic trusts
-    // scripts loaded by nonced scripts without needing unsafe-inline/unsafe-eval
-    `script-src 'nonce-${nonce}' 'strict-dynamic' 'self'`,
+    // NOTE (2026-04-21): previously used nonce + strict-dynamic for maximum
+    // CSP strictness, but that requires every page to be dynamically rendered
+    // (Next.js static pages don't thread the nonce through inline bootstrap
+    // scripts). The result was a fully blocked client bundle and a black
+    // screen in production. Falling back to 'unsafe-inline' + 'unsafe-eval'
+    // matches the shipping pre-sprint CSP. The rest of the directives
+    // (connect-src, frame-src none, object-src none, base-uri self) remain
+    // strict — the real XSS/clickjacking posture is largely preserved.
+    // v1.1 TODO: migrate the root layout to read `headers()` to force dynamic
+    // rendering and restore nonce-based script-src.
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",
@@ -65,17 +73,10 @@ function buildCsp(nonce: string): string {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Generate a cryptographically random nonce for this request
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const response = NextResponse.next({ request });
 
-  // Forward nonce to server components via request header
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-nonce", nonce);
-
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-
-  // Set per-request CSP with nonce — no unsafe-eval, no unsafe-inline for scripts
-  response.headers.set("Content-Security-Policy", buildCsp(nonce));
+  // Static CSP — see buildCsp comment for why nonce path was dropped.
+  response.headers.set("Content-Security-Policy", buildCsp());
 
   const supabase = createSupabaseMiddlewareClient(request, response);
 
