@@ -1,6 +1,8 @@
 /**
  * @jest-environment node
  */
+export {}; // force ES module to isolate top-level consts from sibling test files
+
 const mockAskStructured = jest.fn();
 
 jest.mock("../aiTutor", () => ({

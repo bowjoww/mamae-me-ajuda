@@ -8,7 +8,9 @@ import type { TutorMessage } from "../aiTutor";
 // --------------------------------------------------------------------------
 
 const mockResponsesCreate = jest.fn();
-const mockGetOpenAIClient = jest.fn(() => ({
+// Note: the `..._args` rest param is what lets TSC accept the spread call
+// below. Without it, jest.fn infers a 0-arg signature and TS2556 fires.
+const mockGetOpenAIClient = jest.fn((..._args: unknown[]) => ({
   responses: { create: mockResponsesCreate },
 }));
 

@@ -50,3 +50,6 @@ next-env.d.ts
 
 # private user material (Henrique's actual school content — not for repo)
 /material do henrique/
+
+.env*.local
+supabase/.temp/

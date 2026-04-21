@@ -42,7 +42,8 @@ import type { TutorMessage } from "../aiTutor";
 // ---------------------------------------------------------------------------
 
 const mockResponsesCreate = jest.fn();
-const mockGetOpenAIClient = jest.fn(() => ({
+// rest-args on the mock so spreading into it type-checks (TS2556 guard).
+const mockGetOpenAIClient = jest.fn((..._args: unknown[]) => ({
   responses: { create: mockResponsesCreate },
 }));
 
