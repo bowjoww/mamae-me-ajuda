@@ -4,11 +4,14 @@ import { createSupabaseMiddlewareClient } from "@/lib/supabase/middleware-client
 // Routes that require authentication. Keep this list in sync whenever a new
 // API surface that spends credit, persists user data, or issues tokens lands.
 // Missing routes here are a direct cost-abuse / data-leak vector.
+// NOTE: /api/chat and /api/tts are NOT protected by middleware — they ship
+// with rate-limiting (Upstash) + the chat hook routes an anonymous session,
+// so a 401 here would block the core product flow. Study + gamification
+// endpoints DO require auth because they persist per-user data.
+// v1.1: wire Google OAuth, then add chat/tts back to this list.
 const PROTECTED_ROUTES = [
   "/api/children",
   "/api/conversations",
-  "/api/chat",
-  "/api/tts",
   "/api/study",
   "/api/gamification",
 ];

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ttsRatelimit, getClientIp } from "@/lib/ratelimit";
-import { requireUser } from "@/lib/apiHelpers";
 
 const ttsSchema = z.object({
   text: z.string().min(1).max(4096),
@@ -21,11 +20,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Auth gate — TTS spends OpenAI credit, so only logged-in parents may call it.
-    // Unauthenticated traffic is a direct cost-abuse vector.
-    const auth = await requireUser();
-    if (auth.error) return auth.error;
-
+    // Cost-abuse defense is via Upstash rate-limit (20/min per IP) — auth gate
+    // removed here so the core chat "ouvir resposta" flow works for anonymous
+    // users until Google OAuth signup lands. v1.1 restores requireUser here.
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(

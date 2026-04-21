@@ -11,7 +11,6 @@ import {
 } from "@/lib/chatUtils";
 import { logBlockedModerationEvent, moderateText } from "@/lib/moderation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/apiHelpers";
 import { askTutor, type TutorMessage } from "@/lib/services/aiTutor";
 
 const ALLOWED_IMAGE_MIMES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
@@ -196,13 +195,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Auth gate — every AI call (Gemini or OpenAI) burns credits, so a single
-    // anon hit is a cost-abuse vector. The middleware (src/middleware.ts)
-    // PROTECTED_ROUTES list covers /api/chat too, but we defend in depth: if
-    // the route protection list ever regresses, this guard keeps the AI
-    // calls off the hook.
-    const auth = await requireUser();
-    if (auth.error) return auth.error;
+    // Cost-abuse defense lives in the Upstash rate-limiter above, not in an
+    // auth gate — /api/chat must work for unauthenticated users because the
+    // signup flow (Google OAuth) is still being wired and the core product
+    // (socratic chat) should not block on auth. v1.1 restores auth here once
+    // OAuth is live and the client auto-signs users in on consent accept.
 
     const provider = getAiProvider();
 
