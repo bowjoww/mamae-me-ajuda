@@ -39,7 +39,6 @@ export function PostHogProvider() {
     }, { timeout: 2000 });
 
     return () => cancel(handle);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return null;
@@ -53,11 +52,10 @@ export function usePostHog(): typeof posthog | null {
   const [instance, setInstance] = useState<typeof posthog | null>(() => getPostHogInstance());
 
   useEffect(() => {
-    // If already ready (e.g. navigating to a second page), return immediately.
-    if (getPostHogInstance()) {
-      setInstance(getPostHogInstance());
-      return;
-    }
+    // If already available (captured via lazy initial state, or navigating to
+    // a second page after first-page init), no polling needed. No setState in
+    // effect body — that triggers react-hooks/set-state-in-effect.
+    if (instance) return;
 
     // Poll at low frequency until PostHog finishes its idle-callback init.
     const interval = setInterval(() => {
@@ -69,7 +67,7 @@ export function usePostHog(): typeof posthog | null {
     }, 500);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [instance]);
 
   return instance;
 }
