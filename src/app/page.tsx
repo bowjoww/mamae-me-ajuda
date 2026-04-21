@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { ImagePreviewBar } from "./components/ImagePreviewBar";
 import { ChatInput } from "./components/ChatInput";
@@ -10,11 +10,12 @@ import { TabBar } from "./components/navigation/TabBar";
 import { useConsent } from "@/lib/hooks/useConsent";
 import { useChatSession } from "@/lib/hooks/useChatSession";
 import { useImageUpload } from "@/lib/hooks/useImageUpload";
+import { useStudentName } from "@/lib/hooks/useStudentName";
 import { useTextToSpeech } from "@/lib/hooks/useTextToSpeech";
 
 export default function Home() {
   const { consentGiven, acceptConsent } = useConsent();
-  const [studentName, setStudentName] = useState<string | null>(null);
+  const { studentName, setStudentName } = useStudentName();
   const [nameInput, setNameInput] = useState("");
   const [input, setInput] = useState("");
   const textInputRef = useRef<HTMLInputElement>(null);
@@ -23,10 +24,26 @@ export default function Home() {
   const { imagePreview, handleImageSelect, clearImage } = useImageUpload();
   const { playingIndex, loadingAudio, speak } = useTextToSpeech();
 
+  // When the persisted name hydrates (or Google-derived name resolves),
+  // warm up the chat session so the welcome message is already present
+  // on screen by the time the user sees it. Without this effect the chat
+  // area stays blank until the student sends the first message because
+  // the session was started in `handleStartChat`, which we skip when the
+  // name is auto-restored from storage on navigation.
+  const sessionStartedRef = useRef(false);
+  useEffect(() => {
+    if (sessionStartedRef.current) return;
+    if (studentName && studentName.length > 0 && messages.length === 0) {
+      sessionStartedRef.current = true;
+      startSession(studentName);
+    }
+  }, [studentName, messages.length, startSession]);
+
   const handleStartChat = () => {
     const name = nameInput.trim();
     if (!name) return;
     setStudentName(name);
+    sessionStartedRef.current = true;
     startSession(name);
   };
 
@@ -39,13 +56,18 @@ export default function Home() {
     textInputRef.current?.focus();
   };
 
-  if (consentGiven === null) {
+  // `consentGiven === null` (still reading localStorage) or
+  // `studentName === null` (useStudentName still hydrating) both render a
+  // blank dark placeholder. Showing the WelcomeScreen during hydration
+  // caused the Chat tab bug: every navigation to '/' flashed the name
+  // prompt for a frame before the stored name arrived.
+  if (consentGiven === null || studentName === null) {
     return (
       <div className="h-dvh bg-[var(--canvas-base)]" aria-hidden="true" />
     );
   }
 
-  if (!studentName) {
+  if (studentName === "") {
     return (
       <>
         <WelcomeScreen
