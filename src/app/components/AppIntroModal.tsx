@@ -7,6 +7,12 @@ const INTRO_STORAGE_KEY = "mma.introSeen";
 
 interface AppIntroModalProps {
   studentName: string;
+  /** When true, open the modal even if mma.introSeen is set. Used by the
+   *  header '?' button so the student can re-read the explainer any time. */
+  forceOpen?: boolean;
+  /** Fired when the user dismisses a force-opened modal. Parent clears
+   *  its forceOpen flag so the normal first-session gate can take over. */
+  onClose?: () => void;
 }
 
 interface Mode {
@@ -48,7 +54,11 @@ const ModeIcon = ({
  * replacing it — if the student skips the modal, the chat is still
  * usable underneath.
  */
-export function AppIntroModal({ studentName }: AppIntroModalProps) {
+export function AppIntroModal({
+  studentName,
+  forceOpen,
+  onClose,
+}: AppIntroModalProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
@@ -63,6 +73,11 @@ export function AppIntroModal({ studentName }: AppIntroModalProps) {
     }
   }, []);
 
+  // Re-open the modal when the header '?' button flips forceOpen=true.
+  useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
+
   const dismiss = (navigateToProva: boolean) => {
     try {
       window.localStorage.setItem(INTRO_STORAGE_KEY, "1");
@@ -70,6 +85,7 @@ export function AppIntroModal({ studentName }: AppIntroModalProps) {
       // Best-effort only.
     }
     setOpen(false);
+    onClose?.();
     if (navigateToProva) router.push("/prova");
   };
 

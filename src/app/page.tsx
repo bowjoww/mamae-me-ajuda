@@ -19,6 +19,7 @@ export default function Home() {
   const { studentName, setStudentName } = useStudentName();
   const [nameInput, setNameInput] = useState("");
   const [input, setInput] = useState("");
+  const [introOpen, setIntroOpen] = useState(false);
   const textInputRef = useRef<HTMLInputElement>(null);
 
   const { messages, isLoading, startSession, sendMessage } = useChatSession();
@@ -141,6 +142,29 @@ export default function Home() {
             Tutora no ar
           </p>
         </div>
+        {/* 'Como funciona' escape hatch. Lets the student re-open the
+            first-session explainer when they forget what each tab does.
+            Clears the dismiss flag + forces the modal open via state. */}
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              window.localStorage.removeItem("mma.introSeen");
+            } catch {
+              // ignore — the modal still opens via local state.
+            }
+            setIntroOpen(true);
+          }}
+          aria-label="Como funciona — revela o tutorial de primeiro uso"
+          className="ml-auto shrink-0 w-9 h-9 rounded-full border border-[var(--line)] flex items-center justify-center"
+          style={{ color: "var(--ink-secondary)" }}
+        >
+          <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9.5 9.3a2.5 2.5 0 1 1 3.7 2.2c-.9.5-1.2 1-1.2 2" strokeLinecap="round" />
+            <path d="M12 16.5h.01" strokeLinecap="round" strokeWidth="2" />
+          </svg>
+        </button>
       </header>
 
       <main
@@ -178,8 +202,9 @@ export default function Home() {
       {/* First-session explainer. Mounts AFTER the chat is live so the
           student sees the real UI behind the modal (reinforces the four
           modes are real tabs). AppIntroModal self-gates on
-          mma.introSeen in localStorage so it appears exactly once. */}
-      <AppIntroModal studentName={studentName} />
+          mma.introSeen in localStorage so it appears exactly once —
+          plus the '?' button in the header forces it open on demand. */}
+      <AppIntroModal studentName={studentName} forceOpen={introOpen} onClose={() => setIntroOpen(false)} />
     </div>
   );
 }
