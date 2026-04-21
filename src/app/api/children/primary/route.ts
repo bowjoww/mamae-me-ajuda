@@ -66,10 +66,29 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ data: existing[0] });
     }
 
-    // No child yet — lazily provision. We default grade to "nao_informado"
-    // when the caller didn't pass one; the value is a string anyway and
-    // onboarding may refine it later.
-    const insertName = parsedQuery.data.name ?? "estudante";
+    // No child yet — lazily provision. Name preference order:
+    //   1. Explicit ?name= from the caller (WelcomeScreen typed it).
+    //   2. Google display name from the auth session metadata (first name
+    //      only, so we don't stamp "Giovanni Federici" as a student's name).
+    //   3. Plain "estudante" fallback.
+    // Grade defaults to "nao_informado" and can be refined from a later
+    // multi-child UI.
+    // `requireUser` returns a minimal `{ id }` shape; fetch the full auth
+    // record so we can read the Google OAuth metadata. This call is cached
+    // within the Supabase client for the request.
+    const { data: authUser } = await supabase.auth.getUser();
+    const metadata = authUser?.user?.user_metadata as
+      | { full_name?: unknown; name?: unknown }
+      | undefined;
+    const googleFullName =
+      (typeof metadata?.full_name === "string" ? metadata.full_name : null) ??
+      (typeof metadata?.name === "string" ? metadata.name : null);
+    const googleFirstName = googleFullName?.split(/\s+/)[0] ?? null;
+
+    const insertName =
+      parsedQuery.data.name?.trim() ||
+      googleFirstName?.trim() ||
+      "estudante";
     const insertGrade = parsedQuery.data.grade ?? "nao_informado";
 
     const { data: created, error: insertError } = await supabase

@@ -295,3 +295,46 @@ export const mockStudyPlan: StudyPlan = {
   tier: { rank: "batedor", division: "II" },
   missions,
 };
+
+// ---------------------------------------------------------------------------
+// EMPTY fixtures — used in production as the honest "dia-zero" payload when
+// the backend returns no rows for a fresh account. These must carry zeros
+// everywhere: no fake subjects, no pretend XP, no unlocked achievements,
+// no inventory. They exist only so `mapServerProfile` has a typed shape to
+// populate and the UI can render its empty-state copy.
+// ---------------------------------------------------------------------------
+
+export const emptyProfile: Profile = {
+  studentName: "estudante",
+  title: "Aprendiz",
+  totalXp: 0,
+  tier: { rank: "aprendiz", division: "III" },
+  currentXp: 0,
+  xpForNext: 600,
+  streak: { days: 0, lastActiveIso: null },
+  subjects: [],
+  activity7d: [0, 0, 0, 0, 0, 0, 0],
+  achievements: [],
+  inventory: [],
+};
+
+export const emptyQuests: Quest[] = [];
+export const emptyTopics: TopicRow[] = [];
+export const emptyFlashcards: Flashcard[] = [];
+
+/**
+ * Zero-state study plan placeholder. Used only as the mapper fallback when
+ * the plan query hits an error but a fallback shape is still required so
+ * TypeScript doesn't have to chase `StudyPlan | null` through every page.
+ * A real empty state is surfaced by `fetchStudyPlan` returning `null` when
+ * the id is falsy — this fixture is never shown to users in prod.
+ */
+export const emptyStudyPlan: StudyPlan = {
+  id: "",
+  title: "",
+  subject: "matematica",
+  examDateIso: new Date().toISOString(),
+  createdAtIso: new Date().toISOString(),
+  tier: { rank: "aprendiz", division: "III" },
+  missions: [],
+};

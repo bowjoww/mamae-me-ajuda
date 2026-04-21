@@ -30,6 +30,11 @@ import type {
   TopicRow,
 } from "@/lib/gamification/types";
 import {
+  emptyFlashcards,
+  emptyProfile,
+  emptyQuests,
+  emptyStudyPlan,
+  emptyTopics,
   mockFlashcards,
   mockProfile,
   mockQuests,
@@ -49,6 +54,17 @@ const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_GAMIFICATION === "1";
 // truthful empty state instead of fake data.
 const MOCK_ON_ERROR =
   USE_MOCK || process.env.NODE_ENV === "test" || typeof window === "undefined";
+
+// In the browser in prod the only acceptable "fallback" is the empty/zero
+// shape — returning a seeded mock there leaks fake Henrique data (2360 XP,
+// pre-unlocked achievements, fake subject tiers) into real accounts on
+// their very first login. The mock fixtures are kept for tests and the
+// explicit dev flag, but they must never reach a real user's screen.
+const profileFallback = USE_MOCK ? mockProfile : emptyProfile;
+const questsFallback = USE_MOCK ? mockQuests : emptyQuests;
+const topicsFallback = USE_MOCK ? mockTopics : emptyTopics;
+const studyPlanFallback = USE_MOCK ? mockStudyPlan : emptyStudyPlan;
+const flashcardsFallback = USE_MOCK ? mockFlashcards : emptyFlashcards;
 
 // ---------------------------------------------------------------------------
 // Typed error + child-id resolution
@@ -251,7 +267,7 @@ async function resolveChildIdOrNull(
 export async function fetchProfile(childId?: string): Promise<Profile> {
   const resolved = await resolveChildIdOrNull(childId);
   if (!resolved) {
-    if (MOCK_ON_ERROR) return mockProfile;
+    if (MOCK_ON_ERROR) return profileFallback;
     throw new GamificationError(
       "child_id indisponível.",
       "gamification-profile",
@@ -261,17 +277,17 @@ export async function fetchProfile(childId?: string): Promise<Profile> {
 
   const raw = await fetchJson<unknown>({
     url: `/api/gamification/profile?child_id=${encodeURIComponent(resolved)}`,
-    mockFallback: mockProfile,
+    mockFallback: profileFallback,
     endpoint: "gamification-profile",
   });
 
-  return mapServerProfile(raw, mockProfile);
+  return mapServerProfile(raw, profileFallback);
 }
 
 export async function fetchQuests(childId?: string): Promise<Quest[]> {
   const resolved = await resolveChildIdOrNull(childId);
   if (!resolved) {
-    if (MOCK_ON_ERROR) return mockQuests;
+    if (MOCK_ON_ERROR) return questsFallback;
     throw new GamificationError(
       "child_id indisponível.",
       "gamification-quests",
@@ -281,7 +297,7 @@ export async function fetchQuests(childId?: string): Promise<Quest[]> {
 
   return fetchJson<Quest[]>({
     url: `/api/gamification/quests?child_id=${encodeURIComponent(resolved)}`,
-    mockFallback: mockQuests,
+    mockFallback: questsFallback,
     endpoint: "gamification-quests",
   });
 }
@@ -289,7 +305,7 @@ export async function fetchQuests(childId?: string): Promise<Quest[]> {
 export async function fetchTopics(childId?: string): Promise<TopicRow[]> {
   const resolved = await resolveChildIdOrNull(childId);
   if (!resolved) {
-    if (MOCK_ON_ERROR) return mockTopics;
+    if (MOCK_ON_ERROR) return topicsFallback;
     throw new GamificationError(
       "child_id indisponível.",
       "gamification-topics",
@@ -299,7 +315,7 @@ export async function fetchTopics(childId?: string): Promise<TopicRow[]> {
 
   return fetchJson<TopicRow[]>({
     url: `/api/gamification/topics?child_id=${encodeURIComponent(resolved)}`,
-    mockFallback: mockTopics,
+    mockFallback: topicsFallback,
     endpoint: "gamification-topics",
   });
 }
@@ -310,10 +326,10 @@ export async function fetchStudyPlan(
   if (!id) return null;
   const raw = await fetchJson<unknown>({
     url: `/api/study/plans/${encodeURIComponent(id)}`,
-    mockFallback: mockStudyPlan,
+    mockFallback: studyPlanFallback,
     endpoint: "study-plans-get",
   });
-  return mapServerStudyPlan(raw, mockStudyPlan);
+  return mapServerStudyPlan(raw, studyPlanFallback);
 }
 
 export interface CreatePlanFromUtteranceResult {
@@ -397,7 +413,7 @@ export async function createStudyPlanFromUtterance(params: {
 export async function fetchNextFlashcards(limit = 5): Promise<Flashcard[]> {
   const resolvedChild = await resolveChildIdOrNull(undefined);
   if (!resolvedChild) {
-    if (MOCK_ON_ERROR) return mockFlashcards.slice(0, limit);
+    if (MOCK_ON_ERROR) return flashcardsFallback.slice(0, limit);
     throw new GamificationError(
       "child_id indisponível.",
       "study-flashcards-next",
@@ -412,7 +428,7 @@ export async function fetchNextFlashcards(limit = 5): Promise<Flashcard[]> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ child_id: resolvedChild, mode: "estudo", limit }),
     },
-    mockFallback: mockFlashcards.slice(0, limit),
+    mockFallback: flashcardsFallback.slice(0, limit),
     endpoint: "study-flashcards-next",
   });
 }

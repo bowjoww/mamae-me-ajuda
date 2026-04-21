@@ -96,9 +96,17 @@ function normalizeRank(raw: string | null | undefined): ProfileRank {
 
 /**
  * Translate the server profile envelope into the rich client Profile shape.
- * When the server passes back a null/undefined `profile` (the child has no
- * user_profile row yet — fresh account), we fall back to the mock so the UI
- * doesn't crash, but the totalXp defaults to 0 so nothing lies about activity.
+ *
+ * The fallback is used ONLY as a typed scaffolding for envelope shape — the
+ * mapper never bleeds fallback-derived "data" (subjects, achievements, XP
+ * progress) into the response. Missing fields collapse to honest zeros so
+ * a fresh account renders an empty state instead of a ghost profile that
+ * lies about activity the user didn't do.
+ *
+ * History: an earlier version copied `fallback.currentXp`, `fallback.subjects`,
+ * `fallback.achievements` when the server returned null — producing a perfil
+ * page that looked "completão" for brand-new Google signups. See the session
+ * notes for 2026-04-21 where the Board caught it live.
  */
 export function mapServerProfile(raw: unknown, fallback: Profile): Profile {
   if (isClientProfile(raw)) return raw;
@@ -110,7 +118,7 @@ export function mapServerProfile(raw: unknown, fallback: Profile): Profile {
   const division = (profileRow?.rank_division ?? "III") as "I" | "II" | "III";
 
   const studentName =
-    raw.child_name?.trim() || fallback.studentName || "estudante";
+    raw.child_name?.trim() || "estudante";
 
   const achievements: Achievement[] = (raw.achievements ?? []).map((a) => ({
     id: a.achievement_code,
@@ -126,26 +134,24 @@ export function mapServerProfile(raw: unknown, fallback: Profile): Profile {
     charges: row.qty,
   }));
 
-  // Subjects and activity7d aren't exposed by the backend yet — keep the
-  // fallback values so the HUD has something to render. This is honest when
-  // the fallback is the zero-activity empty state; when it's a seeded mock
-  // it signals to the player that the progress view is a work in progress
-  // rather than a lie about their actual XP.
+  // Zero-defaults for fields the backend doesn't yet aggregate. These MUST
+  // NOT come from `fallback` in prod (see docstring above) — otherwise mock
+  // data leaks into the real profile for fresh accounts.
   return {
     studentName,
-    title: profileRow?.display_title?.trim() || fallback.title,
+    title: profileRow?.display_title?.trim() || "Aprendiz",
     totalXp,
     tier: { rank, division },
-    currentXp: fallback.currentXp,
-    xpForNext: fallback.xpForNext,
+    currentXp: 0,
+    xpForNext: 600,
     streak: {
       days: Number(profileRow?.streak_days ?? 0),
-      lastActiveIso: profileRow?.last_active_at ?? fallback.streak.lastActiveIso,
+      lastActiveIso: profileRow?.last_active_at ?? "",
     },
-    subjects: fallback.subjects,
-    activity7d: fallback.activity7d,
-    achievements: achievements.length > 0 ? achievements : fallback.achievements,
-    inventory: inventory.length > 0 ? inventory : fallback.inventory,
+    subjects: [],
+    activity7d: [0, 0, 0, 0, 0, 0, 0],
+    achievements,
+    inventory,
   };
 }
 
@@ -223,39 +229,50 @@ export function mapServerStudyPlan(
   if (!plan?.id) return fallback;
 
   const subject = normalizeSubject(plan.subject ?? null);
+  const nowIso = new Date().toISOString();
   const examDateIso = plan.exam_date
     ? new Date(plan.exam_date).toISOString()
-    : fallback.examDateIso;
+    : nowIso;
   const createdAtIso = plan.created_at
     ? new Date(plan.created_at).toISOString()
-    : fallback.createdAtIso;
+    : nowIso;
 
   const topics = raw.topics ?? [];
 
-  // For now we map topics 1:1 onto the fallback missions' visual scaffolding.
-  // When the backend gains per-topic progress we can flip `status` from
-  // idle → active/completed from the mastery_score threshold.
-  const missions = fallback.missions.map((m, idx) => {
-    const topic = topics[idx];
-    if (!topic) return m;
+  // Derive missions directly from server topics — no merging of fallback
+  // (mock) missions into the real plan. Each topic becomes a mission in
+  // stored order; status reflects the stored mastery_score. progress.done
+  // starts at 0 for fresh topics (never "4/8" from a fixture).
+  const missionKinds: StudyPlan["missions"][number]["kind"][] = [
+    "abertura",
+    "trilha",
+    "oficina",
+    "ensaio",
+    "prova",
+  ];
+  const missions: StudyPlan["missions"] = topics.map((topic, idx) => {
     const mastery = Number(topic.mastery_score ?? 0);
     const status: StudyPlan["missions"][number]["status"] =
       mastery >= 0.75 ? "completed" : mastery >= 0.1 ? "active" : "idle";
+    const kind = missionKinds[idx] ?? "trilha";
     return {
-      ...m,
-      title: topic.title.length > 40 ? m.title : topic.title,
-      subtitle: m.subtitle,
+      id: topic.id,
+      kind,
+      title: topic.title,
+      subtitle: "",
       status,
+      progress: { done: 0, total: 1 },
+      estimatedMinutes: 20,
     };
   });
 
   return {
     id: plan.id,
-    title: plan.topic?.trim() || fallback.title,
+    title: plan.topic?.trim() || "",
     subject,
     examDateIso,
     createdAtIso,
-    tier: fallback.tier,
+    tier: { rank: "aprendiz", division: "III" },
     missions,
   };
 }
