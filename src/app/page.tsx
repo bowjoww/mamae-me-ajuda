@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { WelcomeScreen } from "./components/WelcomeScreen";
+import { AppIntroModal } from "./components/AppIntroModal";
 import { ImagePreviewBar } from "./components/ImagePreviewBar";
 import { ChatInput } from "./components/ChatInput";
 import { ConsentModal } from "./components/ConsentModal";
@@ -173,6 +174,12 @@ export default function Home() {
           ChatInput at 393×851. `floating={false}` renders the bar as a
           sticky sibling inside the flex flow, giving ChatInput clear space. */}
       <TabBar floating={false} />
+
+      {/* First-session explainer. Mounts AFTER the chat is live so the
+          student sees the real UI behind the modal (reinforces the four
+          modes are real tabs). AppIntroModal self-gates on
+          mma.introSeen in localStorage so it appears exactly once. */}
+      <AppIntroModal studentName={studentName} />
     </div>
   );
 }
