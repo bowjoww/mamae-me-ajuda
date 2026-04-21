@@ -88,6 +88,8 @@ export default function EstudoPage() {
   const [state, setState] = useState<PageState>("hub");
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [cardIdx, setCardIdx] = useState(0);
+  const [collectLoading, setCollectLoading] = useState(false);
+  const [collectError, setCollectError] = useState<string | null>(null);
   const [summary, setSummary] = useState<CollectSummary>({
     xp: 0,
     hits: 0,
@@ -123,11 +125,39 @@ export default function EstudoPage() {
   );
 
   const startCollect = async () => {
-    const next = await fetchNextFlashcards(3);
-    setCards(next);
-    setCardIdx(0);
-    setSummary({ xp: 0, hits: 0, almost: 0, misses: 0, total: next.length });
-    setState("collect");
+    // First-time bootstrap hits GPT-5.1 to generate 5 cards and can take
+    // 5-15s; surface a loading state so the user doesn't tap repeatedly
+    // thinking the button is dead.
+    setCollectLoading(true);
+    setCollectError(null);
+    try {
+      const next = await fetchNextFlashcards(5);
+      if (next.length === 0) {
+        setCollectError(
+          "Sem cartas prontas ainda. Abre uma expedição em Prova pra gente mapear."
+        );
+        setCollectLoading(false);
+        return;
+      }
+      setCards(next);
+      setCardIdx(0);
+      setSummary({
+        xp: 0,
+        hits: 0,
+        almost: 0,
+        misses: 0,
+        total: next.length,
+      });
+      setState("collect");
+    } catch (err) {
+      setCollectError(
+        err instanceof Error
+          ? err.message
+          : "Não consegui preparar a coleta. Tenta de novo?"
+      );
+    } finally {
+      setCollectLoading(false);
+    }
   };
 
   const exitCollect = () => {
@@ -319,7 +349,8 @@ export default function EstudoPage() {
         <button
           type="button"
           onClick={startCollect}
-          className="font-hud uppercase mt-8 w-full py-4 rounded-full"
+          disabled={collectLoading}
+          className="font-hud uppercase mt-8 w-full py-4 rounded-full disabled:opacity-60 disabled:cursor-not-allowed"
           style={{
             background: "var(--violet-action)",
             color: "var(--ink-primary)",
@@ -327,8 +358,21 @@ export default function EstudoPage() {
             letterSpacing: "0.2em",
           }}
         >
-          Começar coleta
+          {collectLoading ? "Preparando coleta..." : "Começar coleta"}
         </button>
+        {collectError && (
+          <p
+            role="alert"
+            className="mt-3"
+            style={{
+              color: "var(--error-wine)",
+              fontSize: "0.8125rem",
+              lineHeight: 1.5,
+            }}
+          >
+            {collectError}
+          </p>
+        )}
 
         <section aria-labelledby="topics-heading" className="mt-12">
           <h2
