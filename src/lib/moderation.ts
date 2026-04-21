@@ -66,14 +66,15 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const BLOCKED_PATTERNS = BLOCKED_KEYWORDS.map(
+  (keyword) => new RegExp(`\\b${escapeRegex(keyword)}\\b`, "i")
+);
+
 function matchesBlockedKeyword(text: string): boolean {
   const normalizedText = normalizeText(text);
   if (!normalizedText) return false;
 
-  return BLOCKED_KEYWORDS.some((keyword) => {
-    const pattern = new RegExp(`\\b${escapeRegex(keyword)}\\b`, "i");
-    return pattern.test(normalizedText);
-  });
+  return BLOCKED_PATTERNS.some((pattern) => pattern.test(normalizedText));
 }
 
 async function moderateWithOpenAI(text: string, scope: ModerationScope): Promise<ModerationResult | null> {

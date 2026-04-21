@@ -22,6 +22,23 @@ jest.mock("@/lib/moderation", () => ({
   logBlockedModerationEvent: jest.fn(),
 }));
 
+// Mock Supabase server client — chat route now calls requireUser() before
+// dispatching to any AI provider. Default: authenticated user.
+jest.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: jest.fn().mockResolvedValue({
+    auth: {
+      getUser: jest
+        .fn()
+        .mockResolvedValue({ data: { user: { id: "test-user-id" } } }),
+    },
+    from: jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: null }),
+    })),
+  }),
+}));
+
 // Mock the Gemini SDK.
 const mockSendMessage = jest.fn();
 const mockStartChat = jest.fn(() => ({ sendMessage: mockSendMessage }));
@@ -75,6 +92,26 @@ describe("POST /api/chat", () => {
     const json = await res.json();
     expect(res.status).toBe(500);
     expect(json.error).toMatch(/configurada/i);
+  });
+
+  it("returns 401 when unauthenticated (prevents AI cost abuse)", async () => {
+    // Override the default supabase mock to return no user for this test only.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createSupabaseServerClient } = require("@/lib/supabase/server");
+    (createSupabaseServerClient as jest.Mock).mockResolvedValueOnce({
+      auth: {
+        getUser: jest.fn().mockResolvedValue({ data: { user: null } }),
+      },
+      from: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({ data: null }),
+      })),
+    });
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(401);
+    // Proof: the Gemini SDK is never invoked when auth fails.
+    expect(mockSendMessage).not.toHaveBeenCalled();
   });
 
   it("returns 400 when the request body is invalid (no messages)", async () => {

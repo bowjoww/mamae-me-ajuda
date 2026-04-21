@@ -28,10 +28,15 @@ const config: Config = {
     "!src/lib/supabase/server.ts",
     // Main page is exercised by E2E tests
     "!src/app/page.tsx",
-    // PostHog browser-only wrapper (no testable runtime logic)
+    // PostHog browser-only wrappers (no testable runtime logic)
     "!src/app/providers/PostHogProvider.tsx",
-    // Next.js middleware — thin Supabase session refresh wrapper
-    "!src/middleware.ts",
+    "!src/app/providers/PostHogClientLoader.tsx",
+    // Next.js proxy (was middleware.ts) — thin Supabase session refresh wrapper
+    "!src/proxy.ts",
+    // Screen-level pages exercised by E2E / visual regression (frontend-owned)
+    "!src/app/prova/page.tsx",
+    "!src/app/perfil/page.tsx",
+    "!src/app/estudo/page.tsx",
   ],
   coverageThreshold: {
     global: {

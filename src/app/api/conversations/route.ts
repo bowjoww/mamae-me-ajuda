@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+const uuidSchema = z.string().uuid();
+
 const createConversationSchema = z.object({
   child_id: z.string().uuid("child_id inválido."),
   title: z.string().min(1).max(200).optional(),
@@ -18,7 +20,12 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const childId = searchParams.get("child_id");
+  const childIdParam = searchParams.get("child_id");
+
+  // Validate child_id query param as UUID before using in DB query
+  if (childIdParam !== null && !uuidSchema.safeParse(childIdParam).success) {
+    return NextResponse.json({ error: "child_id inválido." }, { status: 400 });
+  }
 
   let query = supabase
     .from("conversations")
@@ -26,8 +33,8 @@ export async function GET(req: NextRequest) {
     .eq("parent_id", user.id)
     .order("updated_at", { ascending: false });
 
-  if (childId) {
-    query = query.eq("child_id", childId);
+  if (childIdParam) {
+    query = query.eq("child_id", childIdParam);
   }
 
   const { data, error } = await query;

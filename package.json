@@ -22,6 +22,7 @@
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
     "next": "16.1.7",
+    "openai": "^6.34.0",
     "posthog-js": "^1.366.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",

@@ -14,6 +14,21 @@ jest.mock("@/lib/ratelimit", () => ({
   getClientIp: () => "127.0.0.1",
 }));
 
+// Mock Supabase server client — TTS now requires an authenticated user so that
+// anon traffic cannot burn OpenAI credits. Default: authenticated user.
+jest.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: jest.fn().mockResolvedValue({
+    auth: {
+      getUser: jest
+        .fn()
+        .mockResolvedValue({ data: { user: { id: "test-user-id" } } }),
+    },
+  }),
+}));
+
+// Access to the mocked module for tests that override user state.
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -59,6 +74,23 @@ describe("POST /api/tts", () => {
     process.env = originalEnv;
     global.fetch = originalFetch;
     jest.clearAllMocks();
+  });
+
+  it("returns 401 when unauthenticated (prevents OpenAI cost abuse)", async () => {
+    // Override the default supabase mock to return no user.
+    (createSupabaseServerClient as jest.Mock).mockResolvedValueOnce({
+      auth: {
+        getUser: jest.fn().mockResolvedValue({ data: { user: null } }),
+      },
+    });
+    // Install a fetch spy so we can assert OpenAI is never called. The test
+    // must fail if auth slips through, so this assertion needs a real mock.
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy as unknown as typeof global.fetch;
+    const res = await POST(makeRequest({ text: "Olá!" }));
+    expect(res.status).toBe(401);
+    // Proof: OpenAI is never called when auth fails.
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("returns 500 when OPENAI_API_KEY is missing", async () => {

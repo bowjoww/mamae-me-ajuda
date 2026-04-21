@@ -1,6 +1,7 @@
 import {
   track,
   setPostHogInstance,
+  getPostHogInstance,
   AnalyticsEvent,
   POSTHOG_OPTIONS,
 } from "../analytics";
@@ -96,5 +97,35 @@ describe("AnalyticsEvent constants", () => {
     expect(AnalyticsEvent.MESSAGE_SENT).toBe("message_sent");
     expect(AnalyticsEvent.CTA_CLICKED).toBe("cta_clicked");
     expect(AnalyticsEvent.PREMIUM_UPGRADE_CLICKED).toBe("premium_upgrade_clicked");
+  });
+});
+
+describe("getPostHogInstance", () => {
+  it("returns null when PostHog has not been registered", () => {
+    // afterEach resets via setPostHogInstance(null) — should already be null here
+    expect(getPostHogInstance()).toBeNull();
+  });
+
+  it("returns the instance after it has been registered", () => {
+    setPostHogInstance(mockPostHog);
+    expect(getPostHogInstance()).toBe(mockPostHog);
+  });
+
+  it("returns null again after instance is cleared", () => {
+    setPostHogInstance(mockPostHog);
+    setPostHogInstance(null as never);
+    expect(getPostHogInstance()).toBeNull();
+  });
+});
+
+describe("PostHog lazy-load contract", () => {
+  it("posthog-js is not required synchronously by the analytics module", () => {
+    // The analytics module uses `import type posthog` (type-only import).
+    // At runtime the analytics.ts module must NOT eagerly call require('posthog-js').
+    // We verify this by checking that the module registry does NOT contain posthog-js
+    // after the analytics module has already been imported above.
+    const loaded = Object.keys(require.cache ?? {});
+    const posthogLoaded = loaded.some((k) => k.includes("posthog-js") && !k.includes("__tests__"));
+    expect(posthogLoaded).toBe(false);
   });
 });

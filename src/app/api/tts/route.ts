@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ttsRatelimit, getClientIp } from "@/lib/ratelimit";
+import { requireUser } from "@/lib/apiHelpers";
 
 const ttsSchema = z.object({
   text: z.string().min(1).max(4096),
@@ -8,7 +9,7 @@ const ttsSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    // Rate limiting
+    // Rate limiting — runs first so unauthenticated scanners still get throttled.
     if (ttsRatelimit) {
       const ip = getClientIp(req);
       const { success } = await ttsRatelimit.limit(ip);
@@ -19,6 +20,11 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+
+    // Auth gate — TTS spends OpenAI credit, so only logged-in parents may call it.
+    // Unauthenticated traffic is a direct cost-abuse vector.
+    const auth = await requireUser();
+    if (auth.error) return auth.error;
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {

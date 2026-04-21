@@ -2,20 +2,46 @@
 
 export default function OfflinePage() {
   return (
-    <div className="flex flex-col items-center justify-center h-dvh bg-violet-50 px-6 text-center">
-      <div className="text-7xl mb-6" role="img" aria-label="Sem conexão">
-        📵
-      </div>
-      <h1 className="text-2xl font-bold text-violet-800 mb-3">
-        Sem conexão com a internet
+    <div
+      className="flex flex-col items-center justify-center h-dvh px-6 text-center"
+      style={{ background: "var(--canvas-base)" }}
+    >
+      <p
+        className="font-hud uppercase mb-3"
+        style={{
+          color: "var(--warn)",
+          fontSize: "0.6875rem",
+          letterSpacing: "0.22em",
+        }}
+      >
+        offline
+      </p>
+      <h1
+        className="font-editorial mb-3"
+        style={{
+          color: "var(--ink-primary)",
+          fontSize: "2rem",
+          lineHeight: 1.08,
+          maxWidth: "20rem",
+        }}
+      >
+        Sem conexão com a internet.
       </h1>
-      <p className="text-violet-600 text-base max-w-xs leading-relaxed mb-6">
-        Parece que você está sem internet agora. Verifique sua conexão e tente
-        de novo!
+      <p
+        className="max-w-xs leading-relaxed mb-6"
+        style={{ color: "var(--ink-secondary)", fontSize: "0.875rem" }}
+      >
+        sem conexão. respira, volta quando der.
       </p>
       <button
         onClick={() => window.location.reload()}
-        className="bg-violet-600 text-white font-semibold px-6 py-3 rounded-2xl shadow-md active:scale-95 transition-transform"
+        className="font-hud uppercase px-6 py-3 rounded-full"
+        style={{
+          background: "var(--violet-action)",
+          color: "var(--ink-primary)",
+          fontSize: "0.75rem",
+          letterSpacing: "0.2em",
+        }}
       >
         Tentar de novo
       </button>

@@ -19,7 +19,7 @@ export default function PrivacidadePage() {
         Política de Privacidade
       </h1>
       <p className="text-xs text-gray-500 mb-8">
-        Última atualização: Abril de 2026
+        Última atualização: 20 de abril de 2026 (v2 — operadores nomeados)
       </p>
 
       <div className="prose prose-sm prose-violet max-w-none space-y-6 leading-relaxed">
@@ -87,13 +87,38 @@ export default function PrivacidadePage() {
 
         <section>
           <h2 className="text-base font-bold text-gray-900 mb-2">
-            5. Compartilhamento de dados
+            5. Compartilhamento de dados e operadores (LGPD Art. 9, IV)
           </h2>
           <p>
-            Não vendemos dados pessoais. Compartilhamos dados somente com
-            provedores de serviço essenciais (APIs de IA, Sentry, PostHog), sob
-            acordos de confidencialidade, e com autoridades quando exigido por
-            lei.
+            Não vendemos dados pessoais. O conteúdo das mensagens é
+            encaminhado aos seguintes operadores, utilizados alternadamente
+            ou combinados, sob acordos contratuais que proíbem retenção e
+            treinamento de modelos com os dados:
+          </p>
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>
+              <strong>OpenAI (GPT-5.1)</strong> — geração de respostas.
+              Requisições usam <code>store: false</code>.
+            </li>
+            <li>
+              <strong>Google (Gemini)</strong> — geração de respostas.
+              Requisições usam <code>store: false</code>.
+            </li>
+            <li>
+              <strong>Sentry</strong> — coleta de logs de erro técnicos
+              (sem conteúdo de mensagens).
+            </li>
+            <li>
+              <strong>PostHog</strong> — métricas de uso anonimizadas.
+            </li>
+            <li>
+              <strong>Supabase</strong> — armazenamento do consentimento,
+              nome da criança e progresso de estudo.
+            </li>
+          </ul>
+          <p>
+            Dados também podem ser compartilhados com autoridades quando
+            exigido por lei.
           </p>
         </section>
 
@@ -110,6 +135,21 @@ export default function PrivacidadePage() {
             >
               dpo@mamaemeajuda.com.br
             </a>
+          </p>
+          <p className="mt-3 text-sm">
+            <strong>Portabilidade automática (Art. 18, VI):</strong>{" "}
+            se você estiver logado, pode baixar uma cópia completa dos seus
+            dados a qualquer momento em{" "}
+            <a
+              href="/api/account/export"
+              className="text-violet-600 underline"
+            >
+              /api/account/export
+            </a>
+            . O arquivo JSON inclui seus filhos cadastrados, conversas,
+            mensagens, planos de estudo, flashcards, sessões, perfil de
+            gamificação e registros de consentimento — tudo o que controlamos
+            sobre sua conta. Disponível 1x por hora.
           </p>
         </section>
 

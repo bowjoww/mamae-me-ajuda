@@ -1,181 +1,48 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useRef, useState } from "react";
 import { WelcomeScreen } from "./components/WelcomeScreen";
-import { ChatMessage } from "./components/ChatMessage";
-import { TypingIndicator } from "./components/TypingIndicator";
 import { ImagePreviewBar } from "./components/ImagePreviewBar";
 import { ChatInput } from "./components/ChatInput";
 import { ConsentModal } from "./components/ConsentModal";
-import { type Message, makeWelcomeMessage, compressImage } from "@/lib/chatUtils";
-import { track, AnalyticsEvent } from "@/lib/analytics";
-import { loadConsent } from "@/lib/consent";
+import { MessageList } from "./components/chat/MessageList";
+import { TabBar } from "./components/navigation/TabBar";
+import { useConsent } from "@/lib/hooks/useConsent";
+import { useChatSession } from "@/lib/hooks/useChatSession";
+import { useImageUpload } from "@/lib/hooks/useImageUpload";
+import { useTextToSpeech } from "@/lib/hooks/useTextToSpeech";
 
 export default function Home() {
-  const [consentGiven, setConsentGiven] = useState<boolean | null>(null);
+  const { consentGiven, acceptConsent } = useConsent();
   const [studentName, setStudentName] = useState<string | null>(null);
   const [nameInput, setNameInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const [loadingAudio, setLoadingAudio] = useState<number | null>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Check consent on mount (SSR-safe — localStorage is only available in the browser)
-  useEffect(() => {
-    const record = loadConsent();
-    setConsentGiven(record?.accepted === true);
-  }, []);
-
-  const handleConsentAccept = () => {
-    setConsentGiven(true);
-  };
+  const { messages, isLoading, startSession, sendMessage } = useChatSession();
+  const { imagePreview, handleImageSelect, clearImage } = useImageUpload();
+  const { playingIndex, loadingAudio, speak } = useTextToSpeech();
 
   const handleStartChat = () => {
     const name = nameInput.trim();
     if (!name) return;
     setStudentName(name);
-    setMessages([makeWelcomeMessage(name)]);
-    track(AnalyticsEvent.CHAT_STARTED, { has_name: true });
-  };
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
-
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target?.result as string;
-      const compressed = await compressImage(dataUrl);
-      setImagePreview(compressed);
-    };
-    reader.readAsDataURL(file);
+    startSession(name);
   };
 
   const handleSend = async () => {
-    const trimmedInput = input.trim();
-    if (!trimmedInput && !imagePreview) return;
-    if (isLoading) return;
-
-    const userMessage: Message = {
-      role: "user",
-      content: trimmedInput,
-      image: imagePreview || undefined,
-    };
-
-    const newMessages = [...messages, userMessage];
-    const messageNumber = newMessages.filter((m) => m.role === "user").length;
-    setMessages(newMessages);
+    const textToSend = input;
+    const imageToSend = imagePreview;
     setInput("");
-    setImagePreview(null);
-    setIsLoading(true);
-
-    track(AnalyticsEvent.MESSAGE_SENT, {
-      has_image: !!imagePreview,
-      message_number: messageNumber,
-    });
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: newMessages.slice(1),
-          studentName,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.error) {
-        setMessages([...newMessages, { role: "model", content: data.error }]);
-      } else {
-        setMessages([...newMessages, { role: "model", content: data.response }]);
-      }
-    } catch {
-      setMessages([
-        ...newMessages,
-        {
-          role: "model",
-          content:
-            "Ops! Não consegui me conectar. Verifica sua internet e tenta de novo! 🔌",
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-      textInputRef.current?.focus();
-    }
+    clearImage();
+    await sendMessage(textToSend, imageToSend);
+    textInputRef.current?.focus();
   };
 
-  const handleSpeak = async (text: string, index: number) => {
-    if (playingIndex === index) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      setPlayingIndex(null);
-      return;
-    }
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-
-    setLoadingAudio(index);
-
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-
-      if (!res.ok) {
-        setLoadingAudio(null);
-        return;
-      }
-
-      const audioBlob = await res.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-
-      audio.onended = () => {
-        setPlayingIndex(null);
-        URL.revokeObjectURL(audioUrl);
-        audioRef.current = null;
-      };
-
-      audioRef.current = audio;
-      setLoadingAudio(null);
-      setPlayingIndex(index);
-      await audio.play();
-    } catch {
-      setLoadingAudio(null);
-      setPlayingIndex(null);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, []);
-
-  // null = still loading from localStorage (avoid flash)
   if (consentGiven === null) {
-    return <div className="h-dvh bg-violet-50" aria-hidden="true" />;
+    return (
+      <div className="h-dvh bg-[var(--canvas-base)]" aria-hidden="true" />
+    );
   }
 
   if (!studentName) {
@@ -186,61 +53,77 @@ export default function Home() {
           onNameChange={setNameInput}
           onStart={handleStartChat}
         />
-        {!consentGiven && <ConsentModal onAccept={handleConsentAccept} />}
+        {!consentGiven && <ConsentModal onAccept={acceptConsent} />}
       </>
     );
   }
 
   return (
-    <div className="flex flex-col h-dvh max-w-lg mx-auto">
-      <header className="bg-violet-600 text-white px-4 py-3 shadow-lg flex items-center gap-3 shrink-0">
-        <div className="text-3xl" role="img" aria-label="Livros">📚</div>
-        <div>
-          <h1 className="text-lg font-bold leading-tight">Mamãe, me ajuda!</h1>
-          <p className="text-violet-200 text-xs">Seu ajudante de estudos</p>
+    <div className="flex flex-col h-dvh max-w-lg mx-auto bg-[var(--canvas-base)]">
+      <header
+        className="px-4 py-3 border-b border-[var(--line-soft)] shrink-0 flex items-center gap-3"
+        style={{ background: "var(--canvas-base)" }}
+      >
+        <div className="shrink-0 w-9 h-9 rounded-full border border-[var(--line)] flex items-center justify-center">
+          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" style={{ color: "var(--violet-action)" }}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6.2A2.2 2.2 0 0 1 6.2 4h11.6A2.2 2.2 0 0 1 20 6.2v11.6A2.2 2.2 0 0 1 17.8 20H6.2A2.2 2.2 0 0 1 4 17.8V6.2Z M4 9h16" />
+          </svg>
+        </div>
+        <div className="min-w-0">
+          <h1
+            className="font-editorial"
+            style={{
+              color: "var(--ink-primary)",
+              fontSize: "1.25rem",
+              lineHeight: 1.1,
+            }}
+          >
+            Tarefa — {studentName}
+          </h1>
+          <p
+            className="font-hud uppercase"
+            style={{
+              color: "var(--ink-secondary)",
+              fontSize: "0.625rem",
+              letterSpacing: "0.18em",
+            }}
+          >
+            Tutora no ar
+          </p>
         </div>
       </header>
 
       <main
-        className="flex-1 overflow-y-auto chat-scroll px-4 py-4 space-y-3"
-        aria-label="Conversa com a tutora"
-        aria-live="polite"
-        aria-relevant="additions"
+        className="flex-1 flex flex-col min-h-0"
+        aria-label="Conversa ativa com a tutora"
       >
-        {messages.map((msg, i) => (
-          <ChatMessage
-            key={i}
-            role={msg.role}
-            content={msg.content}
-            image={msg.image}
-            index={i}
-            playingIndex={playingIndex}
-            loadingAudio={loadingAudio}
-            onSpeak={handleSpeak}
-          />
-        ))}
+        <MessageList
+          messages={messages}
+          isLoading={isLoading}
+          playingIndex={playingIndex}
+          loadingAudio={loadingAudio}
+          onSpeak={speak}
+        />
 
-        {isLoading && <TypingIndicator />}
+        {imagePreview && (
+          <ImagePreviewBar imagePreview={imagePreview} onRemove={clearImage} />
+        )}
 
-        <div ref={chatEndRef} aria-hidden="true" />
+        <ChatInput
+          input={input}
+          isLoading={isLoading}
+          hasImagePreview={!!imagePreview}
+          onInputChange={setInput}
+          onSend={handleSend}
+          onImageSelect={handleImageSelect}
+          inputRef={textInputRef}
+        />
       </main>
 
-      {imagePreview && (
-        <ImagePreviewBar
-          imagePreview={imagePreview}
-          onRemove={() => setImagePreview(null)}
-        />
-      )}
-
-      <ChatInput
-        input={input}
-        isLoading={isLoading}
-        hasImagePreview={!!imagePreview}
-        onInputChange={setInput}
-        onSend={handleSend}
-        onImageSelect={handleImageSelect}
-        inputRef={textInputRef}
-      />
+      {/* Chat is a full-viewport flex column — a floating TabBar would overlap
+          ChatInput at 393×851. `floating={false}` renders the bar as a
+          sticky sibling inside the flex flow, giving ChatInput clear space. */}
+      <TabBar floating={false} />
     </div>
   );
 }

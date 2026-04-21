@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { authRatelimit, getClientIp } from "@/lib/ratelimit";
 
 const signupSchema = z.object({
   email: z.string().email("E-mail inválido."),
@@ -11,6 +12,17 @@ const signupSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  if (authRatelimit) {
+    const ip = getClientIp(req);
+    const { success } = await authRatelimit.limit(ip);
+    if (!success) {
+      return NextResponse.json(
+        { error: "Muitas tentativas. Tente novamente em breve." },
+        { status: 429 }
+      );
+    }
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = signupSchema.safeParse(body);
 
@@ -27,7 +39,11 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase.auth.signUp({ email, password });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    // Never expose Supabase internal error details to the client
+    return NextResponse.json(
+      { error: "Não foi possível criar a conta. Tente novamente." },
+      { status: 400 }
+    );
   }
 
   return NextResponse.json(

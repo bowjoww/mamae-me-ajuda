@@ -1,4 +1,15 @@
-export const CONSENT_POLICY_VERSION = "2026-04-01";
+/**
+ * Policy version string — bumped when the disclosure text changes in a
+ * way that requires fresh consent under LGPD Art. 8. Any stored record
+ * with a different version is invalidated in `loadConsent` and the user
+ * is asked to consent again.
+ *
+ * 2026-04-20-v2: names OpenAI/GPT-5.1 and Google/Gemini explicitly as
+ * the data operators (LGPD Art. 9, IV — transparency about who processes
+ * the data). Previously the text said only "processado pela IA" without
+ * identifying the controllers.
+ */
+export const CONSENT_POLICY_VERSION = "2026-04-20-v2";
 const CONSENT_STORAGE_KEY = "mamae_consent";
 
 export interface ConsentRecord {

@@ -173,7 +173,7 @@ describe("GET /api/conversations", () => {
     (createSupabaseServerClient as jest.Mock).mockResolvedValue(
       makeSupabaseMock({ user: { id: "user-1" }, queryResult: { data: [], error: null } })
     );
-    const res = await GET(makeReq("/api/conversations?child_id=child-1"));
+    const res = await GET(makeReq("/api/conversations?child_id=550e8400-e29b-41d4-a716-446655440000"));
     expect(res.status).toBe(200);
   });
 
