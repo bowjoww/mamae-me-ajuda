@@ -200,6 +200,13 @@ export interface Flashcard {
   topic: string;
   front: string;
   back: string;
+  /**
+   * Ordered socratic hints — 2 to 4 nudges from "most general" to
+   * "most specific". Shown progressively in FlashcardDuel so the student
+   * has a path between reading the question and revealing the answer.
+   * Optional: older persisted cards may not carry hints.
+   */
+  hintChain?: string[];
 }
 
 export type TopicMastery = "new" | "progress" | "mastered";

@@ -605,10 +605,18 @@ export interface ReviewOutcome {
 
 export function submitFlashcardReview(
   cardId: string,
-  grade: FlashcardGrade
+  grade: FlashcardGrade,
+  hintsUsed = 0
 ): Promise<ReviewOutcome> {
+  // Mock XP mirrors the real server table: 15/10/6 for acertei with 0/1/2+
+  // hints, 3 for errei (lido debrief), and a "quase" heuristic.
+  const mockXp = grade === "acertei"
+    ? (hintsUsed <= 0 ? 15 : hintsUsed === 1 ? 10 : 6)
+    : grade === "quase"
+      ? 6
+      : 3;
   const mock: ReviewOutcome = {
-    xpAwarded: grade === "acertei" ? 18 : grade === "quase" ? 10 : 4,
+    xpAwarded: mockXp,
     nextReviewIso: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
   };
   const quality = grade === "acertei" ? 5 : grade === "quase" ? 3 : 0;
@@ -620,8 +628,8 @@ export function submitFlashcardReview(
       body: JSON.stringify({
         card_id: cardId,
         quality,
-        hints_used: 0,
-        read_debrief: false,
+        hints_used: hintsUsed,
+        read_debrief: grade === "errei",
       }),
     },
     mockFallback: mock,

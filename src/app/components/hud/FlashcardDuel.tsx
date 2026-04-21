@@ -10,7 +10,7 @@ const CHAT_SEED_STORAGE_KEY = "mma.pendingChatSeed";
 
 interface FlashcardDuelProps {
   card: Flashcard;
-  onGrade: (grade: FlashcardGrade) => void;
+  onGrade: (grade: FlashcardGrade, hintsUsed: number) => void;
 }
 
 const GRADE_BUTTONS: Array<{
@@ -41,8 +41,11 @@ const GRADE_BUTTONS: Array<{
 
 export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
   const [revealed, setRevealed] = useState(false);
+  const [hintsShown, setHintsShown] = useState(0);
   const [showOnboard, setShowOnboard] = useState(false);
   const router = useRouter();
+  const hintChain = card.hintChain ?? [];
+  const hasMoreHints = hintsShown < hintChain.length;
 
   // First-use onboarding: the Board caught that users didn't know the
   // ler→pensar→revelar→avaliar flow. We show a one-time banner that the
@@ -70,8 +73,13 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
   };
 
   const handleGrade = (grade: FlashcardGrade) => {
-    onGrade(grade);
+    // hintsShown is what the SRS/XP engine needs — the XP table pays
+    // more for self-solves (hintsUsed=0 → 15 XP) than hint-assisted
+    // ones (1 → 10, 2+ → 6). Pass the count upstream so the backend
+    // can credit correctly. Reset state for the next card.
+    onGrade(grade, hintsShown);
     setRevealed(false);
+    setHintsShown(0);
   };
 
   // Escape hatch for "não entendi nada que a resposta trouxe". Seeds the
@@ -174,6 +182,38 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
           {card.front}
         </p>
 
+        {hintsShown > 0 && !revealed && (
+          <div
+            className="mt-5 pt-5 border-t border-[var(--line-soft)] flex flex-col gap-3"
+            aria-live="polite"
+          >
+            <p
+              className="font-hud uppercase"
+              style={{
+                color: "var(--violet-action)",
+                fontSize: "0.625rem",
+                letterSpacing: "0.18em",
+              }}
+            >
+              Dicas socráticas ({hintsShown}/{hintChain.length})
+            </p>
+            {hintChain.slice(0, hintsShown).map((hint, idx) => (
+              <p
+                key={idx}
+                className="message-appear"
+                style={{
+                  color: "var(--ink-primary)",
+                  fontSize: "0.9375rem",
+                  lineHeight: 1.55,
+                  paddingLeft: 14,
+                  borderLeft: "2px solid color-mix(in oklch, var(--violet-action) 60%, transparent)",
+                }}
+              >
+                {hint}
+              </p>
+            ))}
+          </div>
+        )}
         {revealed ? (
           <div
             id="flashcard-answer"
@@ -184,10 +224,37 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
               lineHeight: 1.5,
             }}
           >
+            <p
+              className="font-hud uppercase mb-2"
+              style={{
+                color: "var(--lime-energy)",
+                fontSize: "0.625rem",
+                letterSpacing: "0.18em",
+              }}
+            >
+              Resposta comentada
+            </p>
             {card.back}
           </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
+          {!revealed && hasMoreHints && (
+            <button
+              type="button"
+              onClick={() => setHintsShown((n) => Math.min(n + 1, hintChain.length))}
+              className="font-hud uppercase px-4 py-2 rounded-full border"
+              style={{
+                color: "var(--violet-action)",
+                borderColor: "color-mix(in oklch, var(--violet-action) 60%, var(--line))",
+                background: "color-mix(in oklch, var(--violet-action) 4%, transparent)",
+                fontSize: "0.6875rem",
+                letterSpacing: "0.16em",
+              }}
+              aria-label={hintsShown === 0 ? "Mostrar primeira dica socrática" : "Mostrar próxima dica socrática"}
+            >
+              {hintsShown === 0 ? "Pedir dica" : "Outra dica"}
+            </button>
+          )}
           {!revealed && (
             <button
               type="button"
@@ -216,10 +283,10 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
             aria-label={
               revealed
                 ? "Pedir à tutora que explique a resposta de outro jeito"
-                : "Pedir uma dica à tutora sem ver a resposta"
+                : "Falar com a tutora no chat sem ver a resposta"
             }
           >
-            {revealed ? "Explicar no chat" : "Pedir ajuda"}
+            {revealed ? "Explicar no chat" : "Chat da tutora"}
           </button>
         </div>
       </div>

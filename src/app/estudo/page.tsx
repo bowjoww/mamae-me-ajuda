@@ -164,10 +164,10 @@ export default function EstudoPage() {
     setState("hub");
   };
 
-  const onGrade = async (grade: FlashcardGrade) => {
+  const onGrade = async (grade: FlashcardGrade, hintsUsed: number) => {
     const current = cards[cardIdx];
     if (!current) return;
-    const outcome = await submitFlashcardReview(current.id, grade);
+    const outcome = await submitFlashcardReview(current.id, grade, hintsUsed);
     setSummary((prev) => ({
       xp: prev.xp + outcome.xpAwarded,
       hits: prev.hits + (grade === "acertei" ? 1 : 0),

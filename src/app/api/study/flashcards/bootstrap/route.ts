@@ -134,13 +134,30 @@ export async function POST(req: NextRequest) {
         id: string;
         question: string;
         answer_explanation: string;
+        hint_chain: unknown;
       };
+      // hint_chain is stored as jsonb. Accept both shapes:
+      //   - string[] (what generateCardsForTopic emits)
+      //   - [{ text: string }] (older experimental shape — keep reading it
+      //     so we don't lose rows if a migration drifted)
+      const rawHints = Array.isArray(row.hint_chain) ? row.hint_chain : [];
+      const hintChain: string[] = rawHints
+        .map((h) => {
+          if (typeof h === "string") return h;
+          if (h && typeof h === "object" && "text" in h) {
+            const t = (h as { text?: unknown }).text;
+            return typeof t === "string" ? t : "";
+          }
+          return "";
+        })
+        .filter((h): h is string => h.length > 0);
       return {
         id: row.id,
         subject: plan.subject as Flashcard["subject"],
         topic: targetTitle,
         front: row.question,
         back: row.answer_explanation,
+        hintChain: hintChain.length > 0 ? hintChain : undefined,
       };
     });
 
