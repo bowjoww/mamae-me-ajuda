@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Auth gate — every AI call (Gemini or OpenAI) burns credits, so a single
-    // anon hit is a cost-abuse vector. The proxy (src/proxy.ts)
+    // anon hit is a cost-abuse vector. The middleware (src/middleware.ts)
     // PROTECTED_ROUTES list covers /api/chat too, but we defend in depth: if
     // the route protection list ever regresses, this guard keeps the AI
     // calls off the hook.

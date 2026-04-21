@@ -31,8 +31,8 @@ const config: Config = {
     // PostHog browser-only wrappers (no testable runtime logic)
     "!src/app/providers/PostHogProvider.tsx",
     "!src/app/providers/PostHogClientLoader.tsx",
-    // Next.js proxy (was middleware.ts) — thin Supabase session refresh wrapper
-    "!src/proxy.ts",
+    // Next.js middleware — thin Supabase session refresh wrapper
+    "!src/middleware.ts",
     // Screen-level pages exercised by E2E / visual regression (frontend-owned)
     "!src/app/prova/page.tsx",
     "!src/app/perfil/page.tsx",

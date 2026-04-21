@@ -62,7 +62,7 @@ function buildCsp(nonce: string): string {
   return directives.join("; ");
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Generate a cryptographically random nonce for this request

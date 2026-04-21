@@ -35,7 +35,7 @@ check off each item before moving on.
 | `NEXT_PUBLIC_APP_VERSION` | Release tag for Sentry |
 | `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` | CI source-map upload |
 
-Validate at startup via `src/lib/supabase/server.ts` and `src/proxy.ts`.
+Validate at startup via `src/lib/supabase/server.ts` and `src/middleware.ts`.
 
 ## 3. Supabase migrations
 

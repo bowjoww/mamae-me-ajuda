@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
-// CSP is set dynamically per-request in src/proxy.ts using a per-request
+// CSP is set dynamically per-request in src/middleware.ts using a per-request
 // nonce, which removes the need for unsafe-eval and unsafe-inline.
 // Only static, non-CSP security headers live here.
 const securityHeaders = [
