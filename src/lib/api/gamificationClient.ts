@@ -423,6 +423,37 @@ export async function createStudyPlanFromUtterance(params: {
   return { planId, studyPlan };
 }
 
+const ACTIVE_PLAN_STORAGE_KEY = "mma.activePlanId";
+
+function readActivePlanId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(ACTIVE_PLAN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the first batch of flashcards for a study session.
+ *
+ * Flow:
+ *   1. If an active plan is stored in localStorage, call /bootstrap to
+ *      lazy-generate cards for the first topic that doesn't have any yet
+ *      and return them. Generation uses GPT-5.1 with the plan's exam_format
+ *      metadata so AV2-discursive plans get open-ended questions.
+ *   2. If the bootstrap returns an empty array (every topic already has
+ *      cards), fall back to /next for spaced-repetition picks.
+ *   3. If there's no active plan at all, we return an empty array — the
+ *      /estudo page handles that by showing the "Nenhuma patrulha ativa"
+ *      empty state.
+ *
+ * Previously this function POSTed `{ mode, limit }` to /next expecting a
+ * batched array — but /next's schema is .strict() (rejected the extra
+ * `limit`) and it returns a single card. Result: the Arena got an empty
+ * cards array and nothing could be clicked. This version matches both
+ * endpoint contracts.
+ */
 export async function fetchNextFlashcards(limit = 5): Promise<Flashcard[]> {
   const resolvedChild = await resolveChildIdOrNull(undefined);
   if (!resolvedChild) {
@@ -434,16 +465,79 @@ export async function fetchNextFlashcards(limit = 5): Promise<Flashcard[]> {
     );
   }
 
-  return fetchJson<Flashcard[]>({
-    url: "/api/study/flashcards/next",
-    init: {
+  const planId = readActivePlanId();
+
+  // No plan yet → nothing to bootstrap and /next won't have cards either.
+  // The caller (estudo/page.tsx) surfaces this as the empty state with a
+  // link back to /prova to map the expedição first.
+  if (!planId) {
+    if (MOCK_ON_ERROR) return flashcardsFallback.slice(0, limit);
+    return [];
+  }
+
+  try {
+    const res = await fetch("/api/study/flashcards/bootstrap", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ child_id: resolvedChild, mode: "estudo", limit }),
-    },
-    mockFallback: flashcardsFallback.slice(0, limit),
-    endpoint: "study-flashcards-next",
-  });
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        child_id: resolvedChild,
+        plan_id: planId,
+        count: limit,
+      }),
+    });
+
+    if (res.ok) {
+      const body = (await res.json()) as { data?: Flashcard[] };
+      const cards = body.data ?? [];
+      if (cards.length > 0) return cards.slice(0, limit);
+      // Bootstrap returned [] — every topic is already seeded. Fall through
+      // to /next for the SRS pick.
+    } else {
+      // Report but don't block — the /next fallback may still work.
+      Sentry.captureMessage(`bootstrap ${res.status}`, {
+        tags: { endpoint: "study-flashcards-bootstrap" },
+      });
+    }
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { endpoint: "study-flashcards-bootstrap" },
+    });
+  }
+
+  // Spaced-repetition pick: single card or null. If null, the student has
+  // literally nothing left to review in this plan — return empty and let
+  // the Arena render its "fim da coleta" state.
+  try {
+    const res = await fetch("/api/study/flashcards/next", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        child_id: resolvedChild,
+        mode: "estudo",
+        plan_id: planId,
+      }),
+    });
+    if (!res.ok) {
+      if (MOCK_ON_ERROR) return flashcardsFallback.slice(0, limit);
+      return [];
+    }
+    const body = (await res.json()) as { data?: Flashcard | null };
+    return body.data ? [body.data] : [];
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { endpoint: "study-flashcards-next" },
+    });
+    if (MOCK_ON_ERROR) return flashcardsFallback.slice(0, limit);
+    return [];
+  }
 }
 
 export interface ReviewOutcome {
