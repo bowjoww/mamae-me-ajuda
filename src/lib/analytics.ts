@@ -38,6 +38,11 @@ export function setPostHogInstance(instance: PostHogInstance): void {
   _posthog = instance;
 }
 
+/** Returns the current PostHog instance, or null if not yet initialised. */
+export function getPostHogInstance(): PostHogInstance | null {
+  return _posthog;
+}
+
 /**
  * Track an analytics event. Safe to call when analytics is not initialised
  * (e.g. missing env var, SSR, test environment).
