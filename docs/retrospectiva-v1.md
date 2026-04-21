@@ -70,19 +70,14 @@ AV2 não calibrou. Revisar parser de fotos de fichas.
 
 ## 5. Backlog v1.1
 
-Itens conscientemente **não entregues** nesta sprint. Prontos pra próxima:
+Não entregues, conscientemente:
 
-- **`aria-haspopup`** em outros botões de disclosure (já feito em `FlashcardDuel`)
-- **Hidden achievements** (Noturno, Coruja, Maratonista) — existem no catálogo,
-  mas a UI não os reconhece em tempo real ainda
-- **OCR de foto de prova antiga** no setup `/prova` — hoje só aceita URL de
-  Supabase Storage; parser OCR fica pra v1.1
-- **Push notifications** (lembrete véspera de prova) — PWA config existe,
-  falta fluxo de opt-in em `/perfil`
-- **Dashboard de pais** (visibilidade opcional) — fora do escopo v1 por decisão
-  consciente. Henrique precisa sentir que é **espaço dele**, não monitoramento
-- **Modo Prova: múltiplas provas ativas** — hoje 1 expedição por vez; se o
-  Henrique quiser montar matemática + história em paralelo, v1.1
+- `aria-haspopup` em outros botões de disclosure (feito em `FlashcardDuel`)
+- Hidden achievements (Noturno, Coruja, Maratonista) — existem no catálogo mas UI não reconhece em runtime
+- OCR de foto de prova antiga no setup `/prova` (hoje só aceita URL Supabase Storage)
+- Push notifications (PWA config existe, falta opt-in em `/perfil`)
+- Dashboard de pais — consciente: Henrique precisa sentir que é **espaço dele**, não monitoramento
+- Múltiplas provas ativas simultâneas (hoje: 1 expedição por vez)
 
 ---
 

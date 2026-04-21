@@ -42,3 +42,11 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# playwright + e2e artifacts (build output, not source)
+/playwright-report
+/test-results
+/e2e/screenshots
+
+# private user material (Henrique's actual school content — not for repo)
+/material do henrique/
