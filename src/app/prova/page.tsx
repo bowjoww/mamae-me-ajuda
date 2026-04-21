@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { StatusBar } from "../components/hud/StatusBar";
 import { TierBadge } from "../components/hud/TierBadge";
 import { LoadErrorState, LoadSkeleton } from "../components/hud/LoadErrorState";
@@ -66,15 +67,22 @@ const MISSION_ICON: Record<Mission["kind"], ReactNode> = {
   ),
 };
 
-function MissionCard({ mission }: { mission: Mission }) {
+function MissionCard({
+  mission,
+  onStart,
+}: {
+  mission: Mission;
+  onStart?: () => void;
+}) {
   const isExam = mission.kind === "prova";
   const borderColor = isExam ? "var(--error-wine)" : "var(--line)";
   const isActive = mission.status === "active";
   const isCompleted = mission.status === "completed";
+  const clickable = !!onStart && !isCompleted;
 
   return (
     <article
-      className="surface shrink-0 w-[220px] p-4 flex flex-col gap-3"
+      className="surface shrink-0 w-[220px] p-4 flex flex-col gap-3 relative"
       style={{
         borderColor,
         background: isActive
@@ -84,6 +92,17 @@ function MissionCard({ mission }: { mission: Mission }) {
       }}
       aria-label={`${mission.title}: ${mission.subtitle}`}
     >
+      {clickable && (
+        <button
+          type="button"
+          onClick={onStart}
+          aria-label={`Começar trecho: ${mission.title}`}
+          className="absolute inset-0 rounded-[inherit] focus-visible:ring-2 focus-visible:ring-[var(--violet-action)] focus-visible:ring-offset-2 ring-offset-[var(--canvas-base)]"
+          style={{ background: "transparent", zIndex: 1 }}
+        >
+          <span className="sr-only">Começar trecho: {mission.title}</span>
+        </button>
+      )}
       <div className="flex items-center justify-between">
         <span
           className="inline-flex items-center justify-center w-8 h-8 rounded-full border"
@@ -358,6 +377,7 @@ function writeActivePlanId(id: string | null): void {
 }
 
 export default function ProvaPage() {
+  const router = useRouter();
   // After a successful createStudyPlanFromUtterance we want to surface the
   // plan right away without a reload; this override layers over the hook's
   // data. On cold load we read the stored active plan id and fetch both
@@ -479,23 +499,15 @@ export default function ProvaPage() {
             >
               {plan.missions.map((m) => (
                 <div key={m.id} role="listitem">
-                  <MissionCard mission={m} />
+                  <MissionCard
+                    mission={m}
+                    onStart={() => router.push("/estudo")}
+                  />
                 </div>
               ))}
             </div>
           </section>
 
-          <p
-            className="mt-10"
-            style={{
-              color: "var(--ink-secondary)",
-              fontSize: "0.9375rem",
-              lineHeight: 1.55,
-            }}
-          >
-            Ensaio recente: 42 acertos de 60. Seu ritmo está firme. Próxima
-            checagem em 2 sessões.
-          </p>
         </main>
       )}
 

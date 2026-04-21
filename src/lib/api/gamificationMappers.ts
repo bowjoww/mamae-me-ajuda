@@ -23,6 +23,8 @@ import type {
   Achievement,
   PowerUp,
   Profile,
+  Quest,
+  QuestStatus,
   StudyPlan,
   Subject,
 } from "@/lib/gamification/types";
@@ -153,6 +155,97 @@ export function mapServerProfile(raw: unknown, fallback: Profile): Profile {
     achievements,
     inventory,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Quests
+// ---------------------------------------------------------------------------
+
+interface ServerQuestObjective {
+  kind?: string;
+  target?: number | null;
+  progress?: number | null;
+}
+
+interface ServerQuestRow {
+  id: string;
+  subject?: string | null;
+  title: string;
+  description?: string | null;
+  objectives?: ServerQuestObjective[] | null;
+  xp_reward?: number | null;
+  estimated_minutes?: number | null;
+  status?: string | null;
+  // Some rows persist a per-quest `completed_at` or derived flags; they're
+  // not needed by the UI, so we ignore them here.
+}
+
+function isServerQuestRow(value: unknown): value is ServerQuestRow {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.id === "string" && typeof v.title === "string";
+}
+
+function normalizeQuestStatus(raw: string | null | undefined): QuestStatus {
+  if (!raw) return "idle";
+  const slug = raw.toLowerCase();
+  const allowed: QuestStatus[] = [
+    "idle",
+    "active",
+    "completed",
+    "expired",
+    "defeated",
+  ];
+  return (allowed as string[]).includes(slug) ? (slug as QuestStatus) : "idle";
+}
+
+/**
+ * Map the server quest shape (raw `quests` rows + the `objectives` jsonb
+ * array defined in gamificationService) into the client `Quest` the
+ * QuestCard expects.
+ *
+ * Previously the client just cast the server response to `Quest[]`, which
+ * populated `xpReward`, `estimatedMinutes`, `objectivesDone`, `objectivesTotal`
+ * with `undefined` — the UI rendered "+undefined XP", "undefined/undefined",
+ * "~undefinedmin". Board caught this live on /estudo for a fresh account.
+ *
+ * Subject is `null` for daily quests (abstract — "cards_reviewed"). The
+ * QuestCard tolerates the null and hides the subject chip in that case.
+ */
+export function mapServerQuests(raw: unknown): Quest[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((row): row is ServerQuestRow => isServerQuestRow(row))
+    .map((row) => {
+      const objectives = Array.isArray(row.objectives) ? row.objectives : [];
+      const objectivesTotal = objectives.reduce(
+        (sum, o) => sum + Number(o.target ?? 0),
+        0
+      );
+      const objectivesDone = objectives.reduce(
+        (sum, o) => sum + Number(o.progress ?? 0),
+        0
+      );
+      const subject: Subject | null = row.subject
+        ? ((SUBJECTS as readonly string[]).includes(row.subject.toLowerCase())
+            ? (row.subject.toLowerCase() as Subject)
+            : null)
+        : null;
+      return {
+        id: row.id,
+        subject,
+        title: row.title,
+        description: row.description?.trim() || "",
+        objectivesDone,
+        objectivesTotal: objectivesTotal || 1,
+        xpReward: Number(row.xp_reward ?? 0),
+        // No server column for estimated minutes yet — use 10 min as a
+        // neutral default so the footer reads "~10min" instead of
+        // "~undefinedmin".
+        estimatedMinutes: Number(row.estimated_minutes ?? 10),
+        status: normalizeQuestStatus(row.status),
+      };
+    });
 }
 
 // ---------------------------------------------------------------------------

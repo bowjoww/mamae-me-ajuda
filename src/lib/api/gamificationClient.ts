@@ -41,7 +41,11 @@ import {
   mockStudyPlan,
   mockTopics,
 } from "@/lib/api/__mocks__/gamificationFixtures";
-import { mapServerProfile, mapServerStudyPlan } from "./gamificationMappers";
+import {
+  mapServerProfile,
+  mapServerQuests,
+  mapServerStudyPlan,
+} from "./gamificationMappers";
 
 // ---------------------------------------------------------------------------
 // Flag handling
@@ -295,11 +299,20 @@ export async function fetchQuests(childId?: string): Promise<Quest[]> {
     );
   }
 
-  return fetchJson<Quest[]>({
+  // The server returns raw quest rows from Supabase (snake_case columns,
+  // objectives jsonb). If we just cast to Quest[], the UI renders
+  // "+undefined XP" and "undefined/undefined". mapServerQuests converts
+  // the row into the client Quest shape with populated numbers.
+  const raw = await fetchJson<unknown>({
     url: `/api/gamification/quests?child_id=${encodeURIComponent(resolved)}`,
-    mockFallback: questsFallback,
+    mockFallback: questsFallback as unknown,
     endpoint: "gamification-quests",
   });
+  if (Array.isArray(raw) && raw.length > 0 && "objectivesDone" in raw[0]) {
+    // Already client-shaped (mock fallback in dev/test mode).
+    return raw as Quest[];
+  }
+  return mapServerQuests(raw);
 }
 
 export async function fetchTopics(childId?: string): Promise<TopicRow[]> {

@@ -307,9 +307,11 @@ export default function EstudoPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {featured && <QuestCard quest={featured} featured />}
+            {featured && (
+              <QuestCard quest={featured} featured onStart={() => startCollect()} />
+            )}
             {otherQuests.map((q) => (
-              <QuestCard key={q.id} quest={q} />
+              <QuestCard key={q.id} quest={q} onStart={() => startCollect()} />
             ))}
           </div>
         )}

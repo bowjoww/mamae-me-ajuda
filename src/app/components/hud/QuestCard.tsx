@@ -74,7 +74,7 @@ export function QuestCard({ quest, onStart, featured = false }: QuestCardProps) 
             letterSpacing: "0.16em",
           }}
         >
-          {SUBJECT_LABEL[quest.subject]}
+          {quest.subject ? SUBJECT_LABEL[quest.subject] : "Diária"}
         </span>
         <span
           className="font-hud uppercase shrink-0"

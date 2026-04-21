@@ -178,7 +178,10 @@ export type QuestStatus =
 
 export interface Quest {
   id: string;
-  subject: Subject;
+  // Daily quests are abstract (cards_reviewed, focus_session_minutes…) and
+  // are not bound to a single subject. Subject-specific quests (future)
+  // set this to a matéria. Null => generic quest, no subject tag in UI.
+  subject: Subject | null;
   title: string;
   description: string;
   objectivesDone: number;
