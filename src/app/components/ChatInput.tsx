@@ -33,11 +33,21 @@ export function ChatInput({
   const canSend = !isLoading && (input.trim().length > 0 || hasImagePreview);
 
   return (
-    <div className="bg-white border-t border-violet-100 px-3 py-3 shrink-0">
+    <div
+      className="px-3 py-3 shrink-0"
+      style={{
+        background: "var(--canvas-base)",
+        borderTop: "1px solid var(--line-soft)",
+      }}
+    >
       <div className="flex items-center gap-2">
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="p-2.5 text-violet-500 hover:bg-violet-50 rounded-full transition-colors shrink-0"
+          className="p-2.5 rounded-full shrink-0 transition-colors"
+          style={{
+            color: "var(--ink-secondary)",
+            border: "1px solid var(--line)",
+          }}
           aria-label="Tirar foto ou escolher imagem"
           type="button"
         >
@@ -47,7 +57,7 @@ export function ChatInput({
             viewBox="0 0 24 24"
             strokeWidth={1.5}
             stroke="currentColor"
-            className="w-6 h-6"
+            className="w-5 h-5"
             aria-hidden="true"
           >
             <path
@@ -88,7 +98,13 @@ export function ChatInput({
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Digite sua dúvida..."
-          className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-violet-300 transition-all"
+          className="flex-1 rounded-full px-4 py-2.5 outline-none transition-all"
+          style={{
+            background: "var(--canvas-surface)",
+            border: "1px solid var(--line-soft)",
+            color: "var(--ink-primary)",
+            fontSize: "0.875rem",
+          }}
           disabled={isLoading}
           aria-label="Mensagem"
           autoComplete="off"
@@ -97,7 +113,12 @@ export function ChatInput({
         <button
           onClick={onSend}
           disabled={!canSend}
-          className="p-2.5 bg-violet-600 text-white rounded-full hover:bg-violet-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          className="p-2.5 rounded-full transition-colors disabled:cursor-not-allowed shrink-0"
+          style={{
+            background: canSend ? "var(--violet-action)" : "var(--line-soft)",
+            color: canSend ? "var(--ink-primary)" : "var(--ink-tertiary)",
+            opacity: canSend ? 1 : 0.5,
+          }}
           aria-label="Enviar mensagem"
           type="button"
         >

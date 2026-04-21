@@ -5,10 +5,13 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 // Mocks
 // ---------------------------------------------------------------------------
 
-// Mock consent lib so we can control what it does
+// Mock consent lib so we can control what it does.
+// NOTE: keep this in sync with src/lib/consent.ts. Version bumps to the real
+// CONSENT_POLICY_VERSION require re-consent across all existing users, so we
+// mirror the live string here to avoid tests silently lying about version.
 const mockSaveConsentLocally = jest.fn();
 jest.mock("@/lib/consent", () => ({
-  CONSENT_POLICY_VERSION: "2026-04-01",
+  CONSENT_POLICY_VERSION: "2026-04-20-v2",
   saveConsentLocally: (...args: unknown[]) => mockSaveConsentLocally(...args),
 }));
 
@@ -89,6 +92,18 @@ describe("ConsentModal", () => {
     render(<ConsentModal onAccept={onAccept} />);
     const link = screen.getByRole("link", { name: /Política de Privacidade/i });
     expect(link).toHaveAttribute("href", "/privacidade");
+  });
+
+  // LGPD Art. 9, IV — the user must be able to identify *who* processes
+  // their personal data. Generic "a IA" is not enough. If this test breaks
+  // because someone softened the copy to "inteligências artificiais", that
+  // change is a regulatory regression and the test should fail.
+  it("explicitly names OpenAI / GPT / Google / Gemini as data operators", () => {
+    render(<ConsentModal onAccept={onAccept} />);
+    expect(screen.getByText(/OpenAI/)).toBeInTheDocument();
+    expect(screen.getByText(/GPT/)).toBeInTheDocument();
+    expect(screen.getByText(/Google/)).toBeInTheDocument();
+    expect(screen.getByText(/Gemini/)).toBeInTheDocument();
   });
 
   it("fires best-effort fetch to /api/consent after accepting", async () => {

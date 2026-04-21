@@ -6,18 +6,42 @@ interface WelcomeScreenProps {
   onStart: () => void;
 }
 
-export function WelcomeScreen({ nameInput, onNameChange, onStart }: WelcomeScreenProps) {
+export function WelcomeScreen({
+  nameInput,
+  onNameChange,
+  onStart,
+}: WelcomeScreenProps) {
   return (
-    <div className="flex flex-col h-dvh max-w-lg mx-auto items-center justify-center px-6">
-      <div className="bg-white rounded-3xl shadow-lg p-8 w-full max-w-sm text-center">
-        <div className="text-6xl mb-4" role="img" aria-label="Livros">📚</div>
-        <h1 className="text-2xl font-bold text-violet-600 mb-2">
+    <div className="flex flex-col h-dvh max-w-lg mx-auto items-center justify-center px-6 bg-[var(--canvas-base)]">
+      <div
+        className="w-full max-w-sm text-center p-8 rounded-[18px]"
+        style={{
+          background: "var(--canvas-surface)",
+          border: "1px solid var(--line)",
+        }}
+      >
+        <p
+          className="font-hud uppercase mb-3"
+          style={{
+            color: "var(--ink-secondary)",
+            fontSize: "0.625rem",
+            letterSpacing: "0.24em",
+          }}
+        >
           Mamãe, me ajuda!
-        </h1>
-        <p className="text-gray-500 text-sm mb-6">
-          Seu ajudante de estudos
         </p>
-        <label htmlFor="student-name" className="block text-gray-700 text-sm mb-2">
+        <h1
+          className="font-editorial mb-6"
+          style={{
+            color: "var(--ink-primary)",
+            fontSize: "2.25rem",
+            lineHeight: 1.05,
+            letterSpacing: "-0.015em",
+          }}
+        >
+          Como você quer ser chamado?
+        </h1>
+        <label htmlFor="student-name" className="sr-only">
           Qual é o seu nome?
         </label>
         <input
@@ -27,16 +51,34 @@ export function WelcomeScreen({ nameInput, onNameChange, onStart }: WelcomeScree
           onChange={(e) => onNameChange(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && onStart()}
           placeholder="Digite seu nome..."
-          className="w-full bg-gray-100 rounded-full px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-violet-300 transition-all mb-4 text-center"
+          className="w-full rounded-full px-4 py-3 text-center outline-none transition-all mb-4"
+          style={{
+            background: "var(--canvas-base)",
+            border: "1px solid var(--line)",
+            color: "var(--ink-primary)",
+            fontSize: "0.9375rem",
+          }}
           autoFocus
           autoComplete="given-name"
         />
         <button
           onClick={onStart}
           disabled={!nameInput.trim()}
-          className="w-full bg-violet-600 text-white rounded-full py-3 text-sm font-semibold hover:bg-violet-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="font-hud uppercase w-full py-3 rounded-full transition-colors"
+          style={{
+            background: nameInput.trim()
+              ? "var(--violet-action)"
+              : "var(--line-soft)",
+            color: nameInput.trim()
+              ? "var(--ink-primary)"
+              : "var(--ink-tertiary)",
+            fontSize: "0.75rem",
+            letterSpacing: "0.2em",
+            opacity: nameInput.trim() ? 1 : 0.6,
+            cursor: nameInput.trim() ? "pointer" : "not-allowed",
+          }}
         >
-          Começar!
+          Começar
         </button>
       </div>
     </div>

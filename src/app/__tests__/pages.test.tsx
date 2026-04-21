@@ -67,4 +67,22 @@ describe("PrivacidadePage", () => {
     const emailLink = screen.getAllByRole("link", { name: /dpo@mamaemeajuda.com.br/i });
     expect(emailLink.length).toBeGreaterThan(0);
   });
+
+  // LGPD Art. 9, IV — transparency about controllers/operators. Mirrors the
+  // ConsentModal assertion so both surfaces are enforced by tests.
+  it("names OpenAI, GPT, Google, Gemini as operators in section 5", () => {
+    render(<PrivacidadePage />);
+    expect(screen.getByText(/OpenAI/)).toBeInTheDocument();
+    expect(screen.getByText(/GPT/)).toBeInTheDocument();
+    expect(screen.getByText(/Google/)).toBeInTheDocument();
+    expect(screen.getByText(/Gemini/)).toBeInTheDocument();
+  });
+
+  it("exposes the LGPD Art. 18 data export endpoint in section 6", () => {
+    render(<PrivacidadePage />);
+    const exportLink = screen.getByRole("link", {
+      name: /\/api\/account\/export/,
+    });
+    expect(exportLink).toHaveAttribute("href", "/api/account/export");
+  });
 });
