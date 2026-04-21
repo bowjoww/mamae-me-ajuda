@@ -8,9 +8,12 @@
  *   - Offline fallback: /offline page for navigation requests
  *
  * Update: increment CACHE_VERSION on each deploy to bust stale caches.
+ *
+ * 2026-04-21 — v2: force reset of any v1-era caches that may be holding
+ * stale shell from pre-Supabase deploys.
  */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2-2026-04-21";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `assets-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
