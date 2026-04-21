@@ -248,6 +248,31 @@ body {
   animation: fadeInUp var(--dur-normal) var(--ease-out-expo);
 }
 
+/* XP toast — appears at the top of the arena shell when a flashcard is
+   graded, holds for ~0.9s, then fades + drifts upward. Purposefully
+   subtle so it doesn't feel like a slot machine jackpot. */
+@keyframes xpToastFadeInOut {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.96);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -12px) scale(0.98);
+  }
+}
+.xp-toast-appear {
+  animation: xpToastFadeInOut 1400ms var(--ease-out-expo) forwards;
+}
+
 /* Typing indicator dots — smaller, restrained motion */
 @keyframes typingPulse {
   0%,

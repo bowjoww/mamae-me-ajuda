@@ -164,10 +164,21 @@ export default function EstudoPage() {
     setState("hub");
   };
 
+  // Lightweight XP toast — board's UX audit flagged that completing a
+  // flashcard produced zero visual reward. The numbers were going to the
+  // summary but nothing on screen confirmed "you earned X". A toast
+  // flashing "+15 XP" for ~1.4s closes that feedback loop.
+  const [xpToast, setXpToast] = useState<number | null>(null);
+
   const onGrade = async (grade: FlashcardGrade, hintsUsed: number) => {
     const current = cards[cardIdx];
     if (!current) return;
     const outcome = await submitFlashcardReview(current.id, grade, hintsUsed);
+    if (outcome.xpAwarded > 0) {
+      setXpToast(outcome.xpAwarded);
+      // Self-dismiss after the appear+hold+fade animation finishes.
+      setTimeout(() => setXpToast(null), 1400);
+    }
     setSummary((prev) => ({
       xp: prev.xp + outcome.xpAwarded,
       hits: prev.hits + (grade === "acertei" ? 1 : 0),
@@ -216,6 +227,32 @@ export default function EstudoPage() {
         onExit={exitCollect}
       >
         <FlashcardDuel card={current} onGrade={onGrade} />
+        {xpToast !== null && (
+          <div
+            className="xp-toast-appear"
+            role="status"
+            aria-live="polite"
+            style={{
+              position: "fixed",
+              top: 72,
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "color-mix(in oklch, var(--lime-energy) 14%, var(--canvas-surface))",
+              border: "1px solid color-mix(in oklch, var(--lime-energy) 60%, var(--line))",
+              color: "var(--lime-energy)",
+              padding: "10px 18px",
+              borderRadius: 999,
+              fontFamily: "var(--font-jetbrains-mono, monospace)",
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              letterSpacing: "0.06em",
+              zIndex: 60,
+              boxShadow: "0 8px 24px -12px oklch(0% 0 0 / 0.6)",
+            }}
+          >
+            +{xpToast} XP
+          </div>
+        )}
       </ArenaShell>
     );
   }

@@ -119,8 +119,18 @@ export function mapServerProfile(raw: unknown, fallback: Profile): Profile {
   const rank = normalizeRank(profileRow?.current_rank ?? null);
   const division = (profileRow?.rank_division ?? "III") as "I" | "II" | "III";
 
+  // Derive tier progress from totalXp. Ranks span 600 XP in the display
+  // model (smaller than the MMR span in the engine — totalXp is an
+  // absolute accumulator, not MMR). Division progress reads as "21/600",
+  // not "0/600 with 21 accumulated" as Board caught in the audit.
+  const XP_PER_TIER = 600;
+  const currentXp = totalXp % XP_PER_TIER;
+  const xpForNext = XP_PER_TIER;
+
   const studentName =
-    raw.child_name?.trim() || "estudante";
+    raw.child_name?.trim() && raw.child_name.trim() !== "estudante"
+      ? raw.child_name.trim()
+      : "";
 
   const achievements: Achievement[] = (raw.achievements ?? []).map((a) => ({
     id: a.achievement_code,
@@ -144,8 +154,8 @@ export function mapServerProfile(raw: unknown, fallback: Profile): Profile {
     title: profileRow?.display_title?.trim() || "Aprendiz",
     totalXp,
     tier: { rank, division },
-    currentXp: 0,
-    xpForNext: 600,
+    currentXp,
+    xpForNext,
     streak: {
       days: Number(profileRow?.streak_days ?? 0),
       lastActiveIso: profileRow?.last_active_at ?? "",

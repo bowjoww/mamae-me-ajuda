@@ -161,14 +161,21 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
         aria-live="polite"
       >
         <span
-          className="font-hud uppercase"
+          className="font-hud uppercase block truncate"
           style={{
             color: "var(--ink-secondary)",
             fontSize: "0.6875rem",
             letterSpacing: "0.16em",
+            maxWidth: "100%",
           }}
+          title={`${SUBJECT_LABEL[card.subject]} · ${card.topic}`}
         >
-          {SUBJECT_LABEL[card.subject]} · {card.topic}
+          {/* Truncate long auto-generated topic titles (older plans have
+              40+ char topic names like "Mini-simulado AV2 discursivo com
+              10 questões e correção comentada" that were shouting at the
+              student). Cap to ~36 chars plus ellipsis so the header stays
+              a single line. The full text is preserved in the title tooltip. */}
+          {SUBJECT_LABEL[card.subject]} · {card.topic.length > 40 ? card.topic.slice(0, 36).trimEnd() + "…" : card.topic}
         </span>
         <p
           className="font-editorial flex-1 mt-5"

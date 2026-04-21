@@ -10,6 +10,7 @@ import { LoadErrorState, LoadSkeleton } from "../components/hud/LoadErrorState";
 import { TabBar } from "../components/navigation/TabBar";
 import { fetchProfile } from "@/lib/api/gamificationClient";
 import { useAsyncResource } from "@/lib/hooks/useAsyncResource";
+import { useStudentName } from "@/lib/hooks/useStudentName";
 import type { Achievement } from "@/lib/gamification/types";
 import { SUBJECT_LABEL, getRankMeta } from "@/lib/gamification/types";
 
@@ -68,6 +69,11 @@ function AchievementTile({ achievement }: { achievement: Achievement }) {
 export default function PerfilPage() {
   const loadProfile = useCallback(() => fetchProfile(), []);
   const { data: profile, status, reload } = useAsyncResource(loadProfile);
+  // The mapper returns "" when child_name is the placeholder "estudante"
+  // (fresh Google signups land on that before the UI can pass a real
+  // name). Prefer the hook's resolved name (localStorage first, Google
+  // metadata second) and only fall back to the profile name when present.
+  const { studentName: resolvedName } = useStudentName();
 
   // Loading state: render a muted skeleton so the user sees *something*
   // within the first frame. No header/TabBar yet because StatusBar needs
@@ -103,6 +109,13 @@ export default function PerfilPage() {
   }
 
   const rankMeta = getRankMeta(profile.tier.rank);
+  // Preference order: persisted/Google first name → profile.studentName
+  // from the server → "estudante" last-resort. Never show the lowercased
+  // "estudante" placeholder when we have a better name available.
+  const displayName =
+    (resolvedName && resolvedName.trim()) ||
+    profile.studentName ||
+    "estudante";
 
   return (
     <div className="min-h-dvh bg-[var(--canvas-base)] pb-24">
@@ -129,7 +142,7 @@ export default function PerfilPage() {
               letterSpacing: "-0.02em",
             }}
           >
-            {profile.studentName}
+            {displayName}
             <span
               style={{
                 display: "block",
