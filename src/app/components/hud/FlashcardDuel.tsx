@@ -44,7 +44,17 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
   const [hintsShown, setHintsShown] = useState(0);
   const [showOnboard, setShowOnboard] = useState(false);
   const router = useRouter();
-  const hintChain = card.hintChain ?? [];
+  // Defensive field access — the backend evolved separately (raw DB rows
+  // reaching the client before mappers were added) and any missing field
+  // used to crash the whole /estudo page with "Cannot read properties of
+  // undefined". Coerce everything to safe defaults at the top so the
+  // render tree stays valid even against partial payloads.
+  const cardSubject = card?.subject;
+  const cardTopic = card?.topic ?? "";
+  const cardFront = card?.front ?? "";
+  const cardBack = card?.back ?? "";
+  const subjectLabel = cardSubject ? SUBJECT_LABEL[cardSubject] : "Estudo";
+  const hintChain = card?.hintChain ?? [];
   const hasMoreHints = hintsShown < hintChain.length;
 
   // First-use onboarding: the Board caught that users didn't know the
@@ -88,8 +98,8 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
   // seed from sessionStorage on mount.
   const handleAskForHelp = () => {
     const seed = revealed
-      ? `Não entendi muito bem esta resposta. Pode explicar de outro jeito?\n\nPergunta: ${card.front}\n\nResposta: ${card.back}`
-      : `Preciso de uma dica para esta pergunta, sem me dar a resposta:\n\n${card.front}`;
+      ? `Não entendi muito bem esta resposta. Pode explicar de outro jeito?\n\nPergunta: ${cardFront}\n\nResposta: ${cardBack}`
+      : `Preciso de uma dica para esta pergunta, sem me dar a resposta:\n\n${cardFront}`;
     try {
       window.sessionStorage.setItem(CHAT_SEED_STORAGE_KEY, seed);
     } catch {
@@ -168,14 +178,20 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
             letterSpacing: "0.16em",
             maxWidth: "100%",
           }}
-          title={`${SUBJECT_LABEL[card.subject]} · ${card.topic}`}
+          title={`${subjectLabel}${cardTopic ? " · " + cardTopic : ""}`}
         >
           {/* Truncate long auto-generated topic titles (older plans have
               40+ char topic names like "Mini-simulado AV2 discursivo com
               10 questões e correção comentada" that were shouting at the
               student). Cap to ~36 chars plus ellipsis so the header stays
               a single line. The full text is preserved in the title tooltip. */}
-          {SUBJECT_LABEL[card.subject]} · {card.topic.length > 40 ? card.topic.slice(0, 36).trimEnd() + "…" : card.topic}
+          {subjectLabel}
+          {cardTopic
+            ? " · " +
+              (cardTopic.length > 40
+                ? cardTopic.slice(0, 36).trimEnd() + "…"
+                : cardTopic)
+            : ""}
         </span>
         <p
           className="font-editorial flex-1 mt-5"
@@ -186,7 +202,7 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
             letterSpacing: "-0.01em",
           }}
         >
-          {card.front}
+          {cardFront}
         </p>
 
         {hintsShown > 0 && !revealed && (
@@ -241,7 +257,7 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
             >
               Resposta comentada
             </p>
-            {card.back}
+            {cardBack}
           </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
