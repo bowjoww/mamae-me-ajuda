@@ -174,13 +174,20 @@ export default function EstudoPage() {
     const current = cards[cardIdx];
     if (!current) return;
     const outcome = await submitFlashcardReview(current.id, grade, hintsUsed);
-    if (outcome.xpAwarded > 0) {
-      setXpToast(outcome.xpAwarded);
+    // Belt & suspenders: if the server ever drifts to a shape we don't
+    // expect, coerce the XP award to 0 so the recap shows "+0" rather
+    // than "+NaN" (which terrified QA in preview).
+    const awarded =
+      typeof outcome.xpAwarded === "number" && Number.isFinite(outcome.xpAwarded)
+        ? outcome.xpAwarded
+        : 0;
+    if (awarded > 0) {
+      setXpToast(awarded);
       // Self-dismiss after the appear+hold+fade animation finishes.
       setTimeout(() => setXpToast(null), 1400);
     }
     setSummary((prev) => ({
-      xp: prev.xp + outcome.xpAwarded,
+      xp: prev.xp + awarded,
       hits: prev.hits + (grade === "acertei" ? 1 : 0),
       almost: prev.almost + (grade === "quase" ? 1 : 0),
       misses: prev.misses + (grade === "errei" ? 1 : 0),
@@ -280,7 +287,7 @@ export default function EstudoPage() {
                 lineHeight: 1.1,
               }}
             >
-              {summary.hits} acertos de {summary.total}.
+              {summary.hits} {summary.hits === 1 ? "acerto" : "acertos"} de {summary.total}.
             </h1>
           </div>
           <dl className="grid grid-cols-3 gap-3">

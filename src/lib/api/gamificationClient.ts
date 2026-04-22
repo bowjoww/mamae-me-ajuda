@@ -603,7 +603,31 @@ export interface ReviewOutcome {
   nextReviewIso: string;
 }
 
-export function submitFlashcardReview(
+// Server returns snake_case (xp_awarded, next_sm2). Client code and tests
+// consume camelCase (xpAwarded, nextReviewIso). Normalize here so callers
+// never see `undefined + number === NaN` on the recap screen.
+function mapServerReviewOutcome(
+  raw: unknown,
+  fallback: ReviewOutcome
+): ReviewOutcome {
+  if (!raw || typeof raw !== "object") return fallback;
+  const obj = raw as Record<string, unknown>;
+  const xpAwardedRaw = obj["xp_awarded"] ?? obj["xpAwarded"];
+  const xpAwarded =
+    typeof xpAwardedRaw === "number" && Number.isFinite(xpAwardedRaw)
+      ? xpAwardedRaw
+      : 0;
+  const sm2 = obj["next_sm2"];
+  let nextReviewIso = fallback.nextReviewIso;
+  if (sm2 && typeof sm2 === "object") {
+    const sm2Obj = sm2 as Record<string, unknown>;
+    const due = sm2Obj["next_review_at"] ?? sm2Obj["nextReviewAt"];
+    if (typeof due === "string") nextReviewIso = due;
+  }
+  return { xpAwarded, nextReviewIso };
+}
+
+export async function submitFlashcardReview(
   cardId: string,
   grade: FlashcardGrade,
   hintsUsed = 0
@@ -620,7 +644,7 @@ export function submitFlashcardReview(
     nextReviewIso: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
   };
   const quality = grade === "acertei" ? 5 : grade === "quase" ? 3 : 0;
-  return fetchJson<ReviewOutcome>({
+  const raw = await fetchJson<unknown>({
     url: "/api/study/flashcards/review",
     init: {
       method: "POST",
@@ -635,4 +659,5 @@ export function submitFlashcardReview(
     mockFallback: mock,
     endpoint: "study-flashcards-review",
   });
+  return mapServerReviewOutcome(raw, mock);
 }
