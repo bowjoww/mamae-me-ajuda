@@ -2,11 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Flashcard, FlashcardGrade } from "@/lib/gamification/types";
 import { SUBJECT_LABEL } from "@/lib/gamification/types";
 
 const ONBOARD_STORAGE_KEY = "mma.flashcardOnboarded";
 const CHAT_SEED_STORAGE_KEY = "mma.pendingChatSeed";
+
+/**
+ * Coerce a legacy inline-numbered debrief into proper Markdown so
+ * ReactMarkdown can render it as a real ordered list. GPT-5.1 now emits
+ * `1.\n2.\n3.` but older rows in the DB have `1. Relembre... 2. Para
+ * cada...` all on one line. We detect that pattern and insert line
+ * breaks so the list formatting kicks in. Idempotent: text that's
+ * already on its own line is untouched.
+ */
+function normalizeDebrief(raw: string): string {
+  if (!raw) return "";
+  // Insert a line break before any " N. " (space-digit-dot-space) that
+  // looks like a list marker in the middle of a paragraph.
+  return raw
+    .replace(/([^\n])\s+(\d{1,2}\.\s)/g, "$1\n\n$2")
+    .trim();
+}
 
 interface FlashcardDuelProps {
   card: Flashcard;
@@ -257,7 +276,16 @@ export function FlashcardDuel({ card, onGrade }: FlashcardDuelProps) {
             >
               Resposta comentada
             </p>
-            {cardBack}
+            {/* Debrief renders as Markdown so "1. ... 2. ... 3." from the
+                GPT-5.1 prompt becomes an actual numbered list instead of
+                collapsing into a 150-word wall of text. Board flagged this
+                as one of the biggest "textão" complaints. Uses the same
+                ReactMarkdown + remarkGfm stack as ChatMessage so tables
+                and bold also parse. `flashcard-debrief` class styles the
+                spacing between list items so the rhythm is readable. */}
+            <div className="flashcard-debrief">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizeDebrief(cardBack)}</ReactMarkdown>
+            </div>
           </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
