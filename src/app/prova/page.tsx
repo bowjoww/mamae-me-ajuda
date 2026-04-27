@@ -384,6 +384,11 @@ export default function ProvaPage() {
   // data. On cold load we read the stored active plan id and fetch both
   // resources together so we stay consistent with the other pages.
   const [planOverride, setPlanOverride] = useState<StudyPlan | null>(null);
+  // When the user explicitly asks to switch exams ("Trocar prova"), we
+  // need to bypass BOTH the planOverride AND the resource hook's plan so
+  // the page renders the EmptyState form. Once a new plan is created via
+  // EmptyState, this clears and the new plan becomes active.
+  const [forceEmpty, setForceEmpty] = useState(false);
 
   const loadResource = useCallback(async (): Promise<ProvaResource> => {
     const activePlanId = readActivePlanId();
@@ -404,12 +409,25 @@ export default function ProvaPage() {
 
   const { data, status, reload } = useAsyncResource<ProvaResource>(loadResource);
   const profile = data?.profile ?? null;
-  const plan = planOverride ?? data?.plan ?? null;
+  const rawPlan = planOverride ?? data?.plan ?? null;
+  const plan = forceEmpty ? null : rawPlan;
   const state: PageState = plan ? "active" : "empty";
 
   const handleExpeditionCreated = (newPlan: StudyPlan) => {
     writeActivePlanId(newPlan.id);
     setPlanOverride(newPlan);
+    setForceEmpty(false);
+  };
+
+  // Triggered by the "Trocar prova" button on the active state. We DON'T
+  // delete the existing plan from the database (Henrique might still want
+  // to see his Math expedition history), we just clear the localStorage
+  // pointer and force the empty form. The next created plan auto-becomes
+  // the active one because fetchLatestStudyPlan orders by created_at desc.
+  const handleSwitchExam = () => {
+    writeActivePlanId(null);
+    setPlanOverride(null);
+    setForceEmpty(true);
   };
 
   const countdown = useMemo(
@@ -488,6 +506,22 @@ export default function ProvaPage() {
             </div>
             <TierBadge tier={plan.tier} size="large" label={false} />
           </header>
+
+          <button
+            type="button"
+            onClick={handleSwitchExam}
+            className="font-hud uppercase mt-6 self-start px-4 py-2 rounded-full border"
+            style={{
+              color: "var(--ink-secondary)",
+              borderColor: "var(--line)",
+              fontSize: "0.6875rem",
+              letterSpacing: "0.18em",
+              background: "transparent",
+            }}
+            aria-label="Trocar para outra prova"
+          >
+            Trocar prova
+          </button>
 
           <section aria-labelledby="timeline-heading" className="mt-10">
             <h2

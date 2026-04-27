@@ -430,10 +430,47 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ response: text });
   } catch (error) {
+    // Surface error message to Vercel runtime logs so we can diagnose
+    // without Sentry. Sentry keeps capturing for forensics, but the catch
+    // block was previously silent which made root-cause invisible during
+    // Henrique's real-use sessions (chat would fail with no log line).
+    const message = error instanceof Error ? error.message : String(error);
+    const name = error instanceof Error ? error.name : "UnknownError";
+    console.error("[chat_error]", {
+      name,
+      message: message.slice(0, 500),
+      // Stack helps pinpoint provider vs moderation vs persistence layer
+      stack:
+        error instanceof Error && error.stack
+          ? error.stack.split("\n").slice(0, 5).join("\n")
+          : undefined,
+    });
     Sentry.captureException(error, {
       tags: { endpoint: "chat" },
       // LGPD: deliberately omit user data / studentName from context
     });
+
+    // Map common provider errors to kid-friendly 429 instead of opaque 500
+    // so the client surfaces "wait a moment" instead of "something broke".
+    // Gemini SDK throws errors whose messages contain "quota", "rate",
+    // "429", or "RESOURCE_EXHAUSTED" when free-tier limits are hit.
+    const lower = message.toLowerCase();
+    const isQuotaOrRate =
+      lower.includes("quota") ||
+      lower.includes("rate limit") ||
+      lower.includes("429") ||
+      lower.includes("resource_exhausted") ||
+      lower.includes("too many requests");
+    if (isQuotaOrRate) {
+      return NextResponse.json(
+        {
+          error:
+            "A tutora deu uma pausa pra respirar. Tenta de novo daqui a 1 minuto.",
+        },
+        { status: 429 }
+      );
+    }
+
     return NextResponse.json(
       { error: "Ops! Algo deu errado. Tente novamente em alguns segundos." },
       { status: 500 }

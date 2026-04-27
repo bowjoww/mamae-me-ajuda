@@ -6,7 +6,10 @@ import { TierBadge } from "./TierBadge";
 import { XpBar } from "./XpBar";
 
 interface StatusBarProps {
-  profile: Pick<Profile, "tier" | "currentXp" | "xpForNext" | "streak">;
+  profile: Pick<
+    Profile,
+    "tier" | "currentXp" | "xpForNext" | "streak" | "totalXp"
+  >;
   variant?: "hub" | "arena";
 }
 
@@ -14,6 +17,16 @@ export function StatusBar({ profile, variant = "hub" }: StatusBarProps) {
   const paddingY = variant === "arena" ? "py-3.5" : "py-2.5";
   const bg =
     variant === "arena" ? "bg-[var(--arena-base)]" : "bg-[var(--canvas-base)]";
+
+  // Fresh accounts land on rank=aprendiz division=III with totalXp=0. The
+  // Roman III reads as "level 3" to non-gamer parents and confuses kids
+  // about whether they've made progress they haven't. Until the first
+  // earned XP, drop the division entirely and show just the rank — the
+  // division pip reveals as soon as there's something to celebrate.
+  const isFreshStart = (profile.totalXp ?? 0) === 0;
+  const tierLabel = isFreshStart
+    ? RANK_LABEL[profile.tier.rank]
+    : `${RANK_LABEL[profile.tier.rank]} ${profile.tier.division}`;
 
   return (
     <header
@@ -32,7 +45,7 @@ export function StatusBar({ profile, variant = "hub" }: StatusBarProps) {
                 letterSpacing: "0.16em",
               }}
             >
-              {RANK_LABEL[profile.tier.rank]} {profile.tier.division}
+              {tierLabel}
             </span>
             <span
               className="font-hud tabular-nums"

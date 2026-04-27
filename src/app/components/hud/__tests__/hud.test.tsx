@@ -291,12 +291,26 @@ describe("AchievementShard", () => {
 
 const statusProfile: Pick<
   Profile,
-  "tier" | "currentXp" | "xpForNext" | "streak"
+  "tier" | "currentXp" | "xpForNext" | "streak" | "totalXp"
 > = {
   tier: { rank: "batedor", division: "II" },
   currentXp: 640,
   xpForNext: 1000,
   streak: { days: 6, lastActiveIso: "2026-04-19T21:12:00-03:00" },
+  // Non-zero totalXp keeps the division marker visible — the fresh-start
+  // branch in StatusBar only hides "II/III" when totalXp === 0.
+  totalXp: 2640,
+};
+
+const freshStatusProfile: Pick<
+  Profile,
+  "tier" | "currentXp" | "xpForNext" | "streak" | "totalXp"
+> = {
+  tier: { rank: "aprendiz", division: "III" },
+  currentXp: 0,
+  xpForNext: 600,
+  streak: { days: 0, lastActiveIso: "" },
+  totalXp: 0,
 };
 
 describe("StatusBar", () => {
@@ -304,6 +318,14 @@ describe("StatusBar", () => {
     render(<StatusBar profile={statusProfile} />);
     expect(screen.getByText(/Batedor II/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Sequência: 6 dias/)).toBeInTheDocument();
+  });
+
+  it("hides division for fresh accounts (totalXp = 0)", () => {
+    render(<StatusBar profile={freshStatusProfile} />);
+    // Just "Aprendiz" — no "III" pip yet, since the kid hasn't earned
+    // anything to celebrate. The TierBadge alongside still shows the rank.
+    expect(screen.getByText(/^Aprendiz$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Aprendiz III/i)).not.toBeInTheDocument();
   });
 });
 
