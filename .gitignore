@@ -53,3 +53,14 @@ next-env.d.ts
 
 .env*.local
 supabase/.temp/
+
+# ruflo / claude-flow runtime (regenerated locally via `ruflo init`)
+/.claude-flow
+/.swarm
+/.claude/memory.db
+/.claude/skills
+/.claude/agents
+/.claude/commands
+/.claude/helpers
+# legacy
+/ruvector.db
