@@ -65,6 +65,13 @@ export default function Home() {
         window.history.replaceState(null, "", clean);
       }
     }
+    // setState-in-effect is the React-recommended pattern for hydrating
+    // state from external sources (sessionStorage, URL) that aren't
+    // available during SSR. A lazy useState initializer would cause a
+    // hydration mismatch because server and client see different values.
+    // See: https://react.dev/learn/you-might-not-need-an-effect (the
+    // "external system" exception). Lint flags but the pattern is sound.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (seed) setInput(seed);
   }, []);
 

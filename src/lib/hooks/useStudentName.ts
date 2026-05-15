@@ -29,6 +29,13 @@ export function useStudentName(): {
 } {
   const [studentName, setStudentNameState] = useState<string | null>(null);
 
+  // setState-in-effect is the React-recommended pattern when hydrating
+  // from external systems (localStorage, Supabase session) that aren't
+  // available during SSR. The tri-state model (null → "" or "X") relies
+  // on the post-hydration transition, so a lazy useState initializer
+  // would cause a hydration mismatch. The lint rule is over-strict here.
+  // See: https://react.dev/learn/you-might-not-need-an-effect
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (typeof window === "undefined") return;
     // Fast path: cached name.
@@ -77,6 +84,7 @@ export function useStudentName(): {
       cancelled = true;
     };
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const setStudentName = useCallback((name: string) => {
     const trimmed = name.trim();
